@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Arch Linux Kernel Manager
+GenericName=Arch Linux Kernel Manager
+X-GNOME-FullName=Arch Linux Kernel Manager
+Comment=Arch Linux Kernel Manager - Add/Remove Linux kernels
+Exec=/usr/bin/archlinux-kernel-manager
+Icon=archlinux-kernel-manager-tux
+Terminal=false
+Type=Application
+Categories=GTK;GNOME;Utility;Settings;X-GNOME-Settings-Panel;X-GNOME-SystemSettings;X-Unity-Settings-Panel;X-XFCE-SettingsDialog;X-XFCE-SystemSettings;
+Keywords=kernel;tool;system
+StartupNotify=true

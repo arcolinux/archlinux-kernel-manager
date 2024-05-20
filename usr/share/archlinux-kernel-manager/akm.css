@@ -1,0 +1,176 @@
+box#box{
+    padding: 5px 5px 5px 5px;
+}
+
+box#main{
+    padding-left: 20px;
+    padding-right: 20px;
+    padding-bottom: 20px;
+    padding-top: 10px;
+}
+
+box#box_padding_left{
+    padding-left: 5px;
+}
+
+box#vbox_flowbox_message {
+    padding: 10px 10px 10px 10px;
+}
+
+box#vbox_active_kernel{
+   	padding: 5px 5px 5px 5px;
+}
+
+box#hbox_notify_revealer{
+    padding: 10px 10px 10px 10px;
+    border-radius: 10px;
+    border-spacing: 5px;
+    background-color: #3fe1b0;
+    color: #0e1313;
+    border-color: transparent;
+}
+
+box#box_row{
+    padding-left: 20px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+}
+
+box#hbox_kernel{
+	background-color: @theme_base_color;
+	padding-bottom: 8px;
+	box-shadow: -6px 8px 10px rgba(81,41,10,0.1),0px 2px 2px rgba(81,41,10,0.2);
+}
+
+box#vbox_header{
+    background-color: @theme_base_color;
+    border-top: 1px solid @borders;
+    border-bottom: 1px solid @borders;
+    border-left: 1px solid @borders;
+    border-right: 1px solid @borders;
+    padding: 5px 5px 5px 5px;
+    border-radius: 100px;
+    border-spacing: 5px;
+    font-weight: bold;
+    font-family: 'Noto Sans', 'Helvetica', sans-serif;
+    box-shadow: -6px 8px 10px rgba(81,41,10,0.1),0px 2px 2px rgba(81,41,10,0.2);
+}
+
+box#hbox_warning{
+    background-color: #4c8bf5;
+    color: white;
+    font-family: 'Noto Sans', 'Helvetica', sans-serif;
+    padding: 5px 5px 5px 5px;
+}
+
+label#label_notify_revealer{
+    background-color: #3fe1b0;
+    color: #0e1313;
+    font-family: 'Noto Sans', 'Helvetica', sans-serif;
+    font-weight: bold;
+}
+
+label#label_active_kernel {
+    font-family: 'Noto Sans', 'Helvetica', sans-serif;
+    font-size: 11px;
+}
+
+label#label_stack_kernel {
+   font-size: 20px;
+   font-weight: 600;
+   border-top: 1px solid @borders;
+   border-bottom: 1px solid @borders;
+   border-left: 1px solid @borders;
+   border-right: 1px solid @borders;
+   padding: 5px 5px 5px 5px;
+   border-radius: 100px;
+   border-spacing: 5px;
+   font-family: 'Noto Sans', 'Helvetica', sans-serif;
+   color: #fcfcfc;
+   background-color: @theme_base_color;
+}
+
+label#label_stack_desc {
+   font-size: 12.5px;
+   font-weight: 600;
+   padding: 5px 5px 5px 5px;
+   font-style: italic;
+   font-family: 'Noto Sans', 'Helvetica', sans-serif;
+}
+
+label#label_community_warning {
+   font-size: 12.5px;
+   padding: 5px 5px 5px 5px;
+   font-family: 'Noto Sans', 'Helvetica', sans-serif;
+}
+
+label#label_error{
+   font-size: 12.5px;
+   font-weight: 600;
+   padding: 5px 5px 5px 5px;
+   color: #fcfcfc;
+   background-color: #E42217;
+   font-family: 'Noto Sans', 'Helvetica', sans-serif;
+   border-top: 1px solid @borders;
+   border-bottom: 1px solid @borders;
+   border-left: 1px solid @borders;
+   border-right: 1px solid @borders;
+   padding: 5px 5px 5px 5px;
+   border-radius: 10px;
+   border-spacing: 5px;
+}
+
+label#label_stack_count {
+   font-size: 12px;
+   font-weight: 500;
+   padding: 5px 5px 5px 5px;
+   font-style: italic;
+   font-family: 'Noto Sans', 'Helvetica', sans-serif;
+}
+
+label#label_kernel_version {
+    padding: 5px 5px 5px 5px;
+    font-size: 12px;
+    font-family: 'Noto Sans', 'Helvetica', sans-serif;
+}
+
+label#label_kernel_flowbox {
+    padding: 5px 5px 5px 5px;
+    font-size: 11px;
+    font-family: 'Noto Sans', 'Helvetica', sans-serif;
+}
+
+label#label_about {
+    padding: 5px 5px 5px 5px;
+    font-size: 11px;
+    font-family: 'Noto Sans', 'Helvetica', sans-serif;
+}
+
+button#button_uninstall_kernel{
+    font-weight: 600;
+}
+
+.sidebar label{
+    font-size: 12.5px;
+    font-weight: 500;
+    padding: 10px 10px 10px 10px;
+}
+
+.sidebar label:hover,
+.sidebar label:focus{
+    font-weight: bold;
+}
+
+#hbox_stack_sidebar{
+    box-shadow: rgba(33, 35, 38, 0.1) 0px 10px 10px -10px;
+}
+
+#textview_log text{
+    background-color: #232627;
+    color: #fcfcfc;
+    font-family: 'Noto Sans', 'Helvetica', sans-serif;
+    border-top: 1px solid @borders;
+    border-bottom: 1px solid @borders;
+    border-left: 1px solid @borders;
+    border-right: 1px solid @borders;
+}
