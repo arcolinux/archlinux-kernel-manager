@@ -13,14 +13,13 @@ class AboutDialog(Gtk.AboutDialog):
     def __init__(self, manager_gui, **kwargs):
         super().__init__(**kwargs)
 
-        website = "https://github.com/DeltaCopy/archlinux-kernel-manager"
-        authors = ["fennec (DeltaCopy)"]
+        website = "http://arcolinux.info/"
+        authors = ["Erik Dubois", "Fennec"]
         program_name = "Arch Linux Kernel Manager"
         comments = (
             f"Add/Remove Officially supported Linux kernels on Arch based systems\n"
             f"Powered by the Arch Linux Archive (a.k.a ALA)\n"
             f"Community based Linux kernels are also supported\n"
-            f"This application matches your system theme !\n"
             f"Developed in Python with GTK 4\n"
         )
 
@@ -40,7 +39,7 @@ class AboutDialog(Gtk.AboutDialog):
 
         tux_icon = Gdk.Texture.new_from_file(
             file=Gio.File.new_for_path(
-                os.path.join(base_dir, "images/364x408/akm-tux-splash.png")
+                os.path.join(base_dir, "images/96x96/akm-tux.png")
             )
         )
 

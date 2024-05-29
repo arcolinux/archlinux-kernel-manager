@@ -107,26 +107,29 @@ class FlowBox(Gtk.FlowBox):
                     ) == "{}-{}".format(cache.name, cache.version):
                         installed = True
 
-                    if (
-                        cache.name == installed_kernel.name
-                        and cache.version > installed_kernel.version
-                    ):
-                        fn.logger.info(
-                            "Kernel upgrade available - %s %s"
-                            % (cache.name, cache.version)
-                        )
-
-                        tux_icon = Gtk.Picture.new_for_file(
-                            file=Gio.File.new_for_path(
-                                os.path.join(base_dir, "images/48x48/akm-update.png")
+                    if cache.name == installed_kernel.name:
+                        if (
+                            cache.version > installed_kernel.version
+                            or cache.version != installed_kernel.version
+                        ):
+                            fn.logger.info(
+                                "Kernel upgrade available - %s %s"
+                                % (cache.name, cache.version)
                             )
-                        )
-                        tux_icon.set_can_shrink(True)
 
-                        label_kernel_name.set_markup(
-                            "<b>*%s</b> %s <i>%s</i>"
-                            % (cache.name, cache.version, cache.repository)
-                        )
+                            tux_icon = Gtk.Picture.new_for_file(
+                                file=Gio.File.new_for_path(
+                                    os.path.join(
+                                        base_dir, "images/48x48/akm-update.png"
+                                    )
+                                )
+                            )
+                            tux_icon.set_can_shrink(True)
+
+                            label_kernel_name.set_markup(
+                                "<b>*%s</b> %s <i>%s</i>"
+                                % (cache.name, cache.version, cache.repository)
+                            )
 
                 if installed is True:
                     switch_kernel.set_state(True)

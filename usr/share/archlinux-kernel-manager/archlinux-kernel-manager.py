@@ -17,7 +17,7 @@ base_dir = fn.os.path.dirname(fn.os.path.realpath(__file__))
 app_name = "Arch Linux Kernel Manager"
 app_version = "${app_version}"
 app_name_dir = "archlinux-kernel-manager"
-app_id = "com.deltacopy.kernelmanager"
+app_id = "com.arcolinux.kernelmanager"
 lock_file = "/tmp/akm.lock"
 pid_file = "/tmp/akm.pid"
 
@@ -30,6 +30,7 @@ class Main(Gtk.Application):
         default_context = GLib.MainContext.default()
 
         win = self.props.active_window
+
         if not win:
             win = ManagerGUI(
                 application=self,
@@ -42,7 +43,6 @@ class Main(Gtk.Application):
 
         # sourced from /usr/share/icons/hicolor/scalable/apps
         win.set_icon_name("archlinux-kernel-manager-tux")
-
         provider = Gtk.CssProvider.new()
         css_file = Gio.file_new_for_path(base_dir + "/akm.css")
         provider.load_from_file(css_file)

@@ -395,63 +395,66 @@ def write_cache():
 # install from the ALA
 def install_archive_kernel(self):
     try:
-        for pkg_archive_url in self.official_kernels:
-            if self.errors_found is True:
-                break
+        install_cmd_str = [
+            "pacman",
+            "-U",
+            self.official_kernels[0],
+            self.official_kernels[1],
+            "--noconfirm",
+            "--needed",
+        ]
 
-            install_cmd_str = [
-                "pacman",
-                "-U",
-                pkg_archive_url,
-                "--noconfirm",
-                "--needed",
-            ]
+        wait_for_pacman_process()
 
-            wait_for_pacman_process()
+        logger.info("Running %s" % install_cmd_str)
 
-            logger.info("Running %s" % install_cmd_str)
+        event = "%s [INFO]: Running %s\n" % (
+            datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
+            " ".join(install_cmd_str),
+        )
 
-            event = "%s [INFO]: Running %s\n" % (
-                datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
-                " ".join(install_cmd_str),
-            )
+        event_log = []
+        self.messages_queue.put(event)
 
-            event_log = []
-            self.messages_queue.put(event)
+        with subprocess.Popen(
+            install_cmd_str,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            bufsize=1,
+            universal_newlines=True,
+        ) as process:
+            while True:
+                if process.poll() is not None:
+                    break
+                for line in process.stdout:
+                    print(line.strip())
+                    self.messages_queue.put(line)
+                    event_log.append(line.lower().strip())
 
-            with subprocess.Popen(
-                install_cmd_str,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                bufsize=1,
-                universal_newlines=True,
-            ) as process:
-                while True:
-                    if process.poll() is not None:
-                        break
-                    for line in process.stdout:
-                        print(line.strip())
-                        self.messages_queue.put(line)
-                        event_log.append(line.lower().strip())
+                time.sleep(0.3)
 
-                    time.sleep(0.3)
+        error = None
 
-            error = None
+        if (
+            "installation finished. no error reported."
+            or "initcpio image generation successful" in event_log
+        ):
+            error = False
 
-            if "installation finished. no error reported." in event_log:
-                error = False
-            else:
+        else:
+            if error is None:
                 # check errors and indicate to user install failed
                 for log in event_log:
                     # if "installation finished. no error reported." in log:
                     #     error = False
                     #     break
                     if "error" in log or "errors" in log:
-
                         event = (
                             "%s <b>[ERROR]: Errors have been encountered during installation</b>\n"
                             % (datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
                         )
+
+                        logger.error(log)
 
                         self.messages_queue.put(event)
 
@@ -471,57 +474,49 @@ def install_archive_kernel(self):
 
                         break
 
-            # query to check if kernel installed
-            if "headers" in pkg_archive_url:
-                if (
-                    check_kernel_installed(self.kernel.name + "-headers")
-                    and error is False
-                ):
+        # query to check if kernel installed
 
-                    self.kernel_state_queue.put(
-                        (0, "install", self.kernel.name + "-headers")
-                    )
+        if check_kernel_installed(self.kernel.name + "-headers") and error is False:
 
-                    event = "%s [INFO]: Installation of %s-headers completed\n" % (
-                        datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
-                        self.kernel.name,
-                    )
+            self.kernel_state_queue.put((0, "install", self.kernel.name + "-headers"))
 
-                    self.messages_queue.put(event)
+            event = "%s [INFO]: Installation of %s-headers completed\n" % (
+                datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
+                self.kernel.name,
+            )
 
-                else:
-                    self.kernel_state_queue.put(
-                        (1, "install", self.kernel.name + "-headers")
-                    )
+            self.messages_queue.put(event)
 
-                    event = "%s [ERROR]: Installation of %s-headers failed\n" % (
-                        datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
-                        self.kernel.name,
-                    )
+        else:
+            self.kernel_state_queue.put((1, "install", self.kernel.name + "-headers"))
 
-                    self.errors_found = True
-                    self.messages_queue.put(event)
+            event = "%s [ERROR]: Installation of %s-headers failed\n" % (
+                datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
+                self.kernel.name,
+            )
 
-            else:
-                if check_kernel_installed(self.kernel.name) and error is False:
-                    self.kernel_state_queue.put((0, "install", self.kernel.name))
+            self.errors_found = True
+            self.messages_queue.put(event)
 
-                    event = "%s [INFO]: Installation of kernel %s completed\n" % (
-                        datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
-                        self.kernel.name,
-                    )
+        if check_kernel_installed(self.kernel.name) and error is False:
+            self.kernel_state_queue.put((0, "install", self.kernel.name))
 
-                    self.messages_queue.put(event)
+            event = "%s [INFO]: Installation of kernel %s completed\n" % (
+                datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
+                self.kernel.name,
+            )
 
-                else:
-                    self.kernel_state_queue.put((1, "install", self.kernel.name))
+            self.messages_queue.put(event)
 
-                    event = "%s [ERROR]: Installation of kernel %s failed\n" % (
-                        datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
-                        self.kernel.name,
-                    )
+        else:
+            self.kernel_state_queue.put((1, "install", self.kernel.name))
 
-                    self.messages_queue.put(event)
+            event = "%s [ERROR]: Installation of kernel %s failed\n" % (
+                datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
+                self.kernel.name,
+            )
+
+            self.messages_queue.put(event)
 
         # signal to say end reached
         self.kernel_state_queue.put(None)
@@ -1117,80 +1112,76 @@ def get_community_kernels(self):
 # =====================================================
 def install_community_kernel(self):
     try:
-        for kernel in [self.kernel.name, "%s-headers" % self.kernel.name]:
-            error = False
+        error = False
+        install_cmd_str = [
+            "pacman",
+            "-S",
+            "%s/%s" % (self.kernel.repository, self.kernel.name),
+            "%s/%s" % (self.kernel.repository, "%s-headers" % self.kernel.name),
+            "--noconfirm",
+            "--needed",
+        ]
 
-            if self.errors_found is True:
+        logger.info("Running %s" % install_cmd_str)
+
+        event = "%s [INFO]: Running %s\n" % (
+            datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
+            " ".join(install_cmd_str),
+        )
+
+        event_log = []
+
+        self.messages_queue.put(event)
+
+        with subprocess.Popen(
+            install_cmd_str,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            bufsize=1,
+            universal_newlines=True,
+        ) as process:
+            while True:
+                if process.poll() is not None:
+                    break
+                for line in process.stdout:
+                    print(line.strip())
+                    self.messages_queue.put(line)
+                    event_log.append(line.lower().strip())
+
+                time.sleep(0.3)
+
+        for log in event_log:
+            if "installation finished. no error reported." in log:
+                error = False
                 break
 
-            install_cmd_str = [
-                "pacman",
-                "-S",
-                "%s/%s" % (self.kernel.repository, kernel),
-                "--noconfirm",
-                "--needed",
-            ]
+            if "error" in log:
+                error = True
 
-            logger.info("Running %s" % install_cmd_str)
+        if check_kernel_installed(self.kernel.name) and error is False:
+            logger.info("Kernel = installed")
 
-            event = "%s [INFO]: Running %s\n" % (
+            self.kernel_state_queue.put((0, "install", self.kernel.name))
+
+            event = "%s [INFO]: Installation of %s completed\n" % (
                 datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
-                " ".join(install_cmd_str),
+                self.kernel.name,
             )
-
-            event_log = []
 
             self.messages_queue.put(event)
 
-            with subprocess.Popen(
-                install_cmd_str,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                bufsize=1,
-                universal_newlines=True,
-            ) as process:
-                while True:
-                    if process.poll() is not None:
-                        break
-                    for line in process.stdout:
-                        print(line.strip())
-                        self.messages_queue.put(line)
-                        event_log.append(line.lower().strip())
+        else:
+            logger.error("Kernel = install failed")
 
-                    time.sleep(0.3)
+            self.kernel_state_queue.put((1, "install", self.kernel.name))
 
-            for log in event_log:
-                if "installation finished. no error reported." in log:
-                    error = False
-                    break
+            event = "%s [ERROR]: Installation of %s failed\n" % (
+                datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
+                self.kernel.name,
+            )
 
-                if "error" in log:
-                    error = True
-
-            if check_kernel_installed(kernel) and error == False:
-                logger.info("Kernel = installed")
-
-                self.kernel_state_queue.put((0, "install", kernel))
-
-                event = "%s [INFO]: Installation of %s completed\n" % (
-                    datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
-                    kernel,
-                )
-
-                self.messages_queue.put(event)
-
-            else:
-                logger.error("Kernel = install failed")
-
-                self.kernel_state_queue.put((1, "install", kernel))
-
-                event = "%s [ERROR]: Installation of %s failed\n" % (
-                    datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
-                    kernel,
-                )
-
-                self.errors_found = True
-                self.messages_queue.put(event)
+            self.errors_found = True
+            self.messages_queue.put(event)
 
         # signal to say end reached
         self.kernel_state_queue.put(None)
@@ -1407,8 +1398,9 @@ def get_boot_loader():
 
 
 def get_kernel_version(kernel):
-    cmd = ["pacman", "-Q", kernel]
-
+    cmd = ["pacman", "-Qli", kernel]
+    # pacman_kernel_version = None
+    kernel_modules_path = None
     try:
         logger.debug("Running %s" % " ".join(cmd))
         process = subprocess.run(
@@ -1423,10 +1415,66 @@ def get_kernel_version(kernel):
 
         if process.returncode == 0:
             for line in process.stdout.splitlines():
-                print(line.strip())
-                return line.split(" ")[1]
+                # if line.startswith("Version         :"):
+                #     pacman_kernel_version = line.split("Version         :")[1].strip()
+                #     print(pacman_kernel_version)
+
+                if "/usr/lib/modules/" in line:
+                    if "kernel" in line.split(" ")[1]:
+                        kernel_modules_path = line.split(" ")[1]
+                        break
+
+            if kernel_modules_path is not None:
+                return (
+                    kernel_modules_path.split("/usr/lib/modules/")[1]
+                    .strip()
+                    .split("/kernel/")[0]
+                    .strip()
+                )
+        else:
+            return None
+
     except Exception as e:
         logger.error("Exception in get_kernel_version(): %s" % e)
+
+
+def run_process(self):
+    error = False
+
+    logger.debug("Running process = %s" % " ".join(self.cmd))
+    with subprocess.Popen(
+        self.cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=1,
+        universal_newlines=True,
+    ) as process:
+        while True:
+            if process.poll() is not None:
+                break
+            for line in process.stdout:
+                self.messages_queue.put(line)
+                self.stdout_lines.append(line.lower().strip())
+                print(line.strip())
+
+    for log in self.stdout_lines:
+        if "error" in log or "errors" in log:
+            self.errors_found = True
+
+            error = True
+
+    if error is True:
+        self.label_notify_revealer.set_text("%s failed" % " ".join(self.cmd))
+        self.reveal_notify()
+
+        logger.error("%s failed" % " ".join(self.cmd))
+    else:
+        self.label_notify_revealer.set_text("%s completed" % " ".join(self.cmd))
+        self.reveal_notify()
+
+        logger.info("%s completed" % " ".join(self.cmd))
+
+        # time.sleep(0.3)
 
 
 # ======================================================================
@@ -1437,14 +1485,30 @@ def get_kernel_version(kernel):
 # grub - grub-mkconfig /boot/grub/grub.cfg
 # systemd-boot - bootctl update
 def update_bootloader(self):
-    cmd = None
+    cmds = []
+    error = False
+    self.stdout_lines = []
 
     if self.action == "install":
         image = "images/48x48/akm-install.png"
-        cmd = ["kernel-install", "add-all"]
+
+        if self.installed_kernel_version is not None:
+
+            for self.cmd in [
+                ["kernel-install", "add-all"],
+                ["kernel-install", "remove", self.installed_kernel_version],
+            ]:
+                run_process(self)
+
+        else:
+            self.cmd = ["kernel-install", "add-all"]
+            run_process(self)
+
     else:
         image = "images/48x48/akm-remove.png"
-        cmd = ["kernel-install", "remove", self.installed_kernel_version]
+        if self.installed_kernel_version is not None:
+            self.cmd = ["kernel-install", "remove", self.installed_kernel_version]
+            run_process(self)
 
     try:
 
@@ -1460,17 +1524,35 @@ def update_bootloader(self):
 
         logger.info("Current bootloader = %s" % self.bootloader)
 
-        if cmd is not None:
-            stdout_lines = []
+        cmd = None
+
+        if self.bootloader == "grub":
+            if self.bootloader_grub_cfg is not None:
+                cmd = ["grub-mkconfig", "-o", self.bootloader_grub_cfg]
+            else:
+                logger.error("Bootloader grub config file not specified")
+
             event = "%s [INFO]: Running %s\n" % (
                 datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
                 " ".join(cmd),
             )
-
             self.messages_queue.put(event)
 
-            logger.info("Running %s" % " ".join(cmd))
+        elif self.bootloader == "systemd-boot":
+            # cmd = ["bootctl", "update"]
+            # graceful update systemd-boot
+            cmd = ["bootctl", "--no-variables", "--graceful", "update"]
+            event = "%s [INFO]: Running %s\n" % (
+                datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
+                " ".join(cmd),
+            )
+            self.messages_queue.put(event)
+        else:
+            logger.error("Bootloader is empty / not supported")
 
+        if cmd is not None:
+            self.stdout_lines = []
+            logger.info("Running %s" % " ".join(cmd))
             with subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -1482,183 +1564,105 @@ def update_bootloader(self):
                     if process.poll() is not None:
                         break
                     for line in process.stdout:
+                        self.stdout_lines.append(line.strip())
                         self.messages_queue.put(line)
-                        stdout_lines.append(line.lower().strip())
                         print(line.strip())
 
                     # time.sleep(0.3)
 
-            error = False
+                if process.returncode == 0:
+                    self.label_notify_revealer.set_text(
+                        "Bootloader %s updated" % self.bootloader
+                    )
+                    self.reveal_notify()
 
-            for log in stdout_lines:
-                if "error" in log or "errors" in log:
+                    logger.info("%s update completed" % self.bootloader)
 
-                    # event = (
-                    #     "%s <b>[ERROR]: Errors have been encountered during installation</b>\n"
-                    #     % (datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
-                    # )
-                    #
-                    # self.messages_queue.put(event)
+                    event = "%s [INFO]: %s update completed\n" % (
+                        datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
+                        self.bootloader,
+                    )
+                    self.messages_queue.put(event)
 
-                    self.errors_found = True
+                    logger.info("Linux packages have changed a reboot is recommended")
+                    event = "%s [INFO]: <b>#### Linux packages have changed a reboot is recommended ####</b>\n" % datetime.datetime.now().strftime(
+                        "%Y-%m-%d-%H-%M-%S"
+                    )
+                    self.messages_queue.put(event)
 
-                    error = True
+                    if self.restore is False:
+                        GLib.idle_add(
+                            show_mw,
+                            self,
+                            "System changes",
+                            f"<b>Kernel {self.action} completed</b>\n"
+                            f"This window can now be closed\n",
+                            image,
+                            priority=GLib.PRIORITY_DEFAULT,
+                        )
+                else:
+                    if (
+                        "Skipping"
+                        or "same boot loader version in place already." in stdout_lines
+                    ):
+                        logger.info("%s update completed" % self.bootloader)
 
-            if error is True:
-                self.label_notify_revealer.set_text("%s failed" % " ".join(cmd))
-                self.reveal_notify()
+                        event = "%s [INFO]: <b>%s update completed</b>\n" % (
+                            datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
+                            self.bootloader,
+                        )
+                        self.messages_queue.put(event)
 
-                logger.error("%s failed" % " ".join(cmd))
-            else:
-                self.label_notify_revealer.set_text("%s completed" % " ".join(cmd))
-                self.reveal_notify()
+                        if self.restore is False:
+                            GLib.idle_add(
+                                show_mw,
+                                self,
+                                "System changes",
+                                f"<b>Kernel {self.action} completed</b>\n"
+                                f"This window can now be closed\n",
+                                image,
+                                priority=GLib.PRIORITY_DEFAULT,
+                            )
 
-                logger.info("%s completed" % " ".join(cmd))
-
-                if self.bootloader == "grub":
-                    if self.bootloader_grub_cfg is not None:
-                        cmd = ["grub-mkconfig", "-o", self.bootloader_grub_cfg]
                     else:
-                        logger.error("Bootloader grub config file not specified")
+                        self.label_notify_revealer.set_text(
+                            "Bootloader %s update failed" % self.bootloader
+                        )
+                        self.reveal_notify()
 
-                    event = "%s [INFO]: Running %s\n" % (
-                        datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
-                        " ".join(cmd),
-                    )
-                    self.messages_queue.put(event)
+                        event = "%s [ERROR]: <b>%s update failed</b>\n" % (
+                            datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
+                            self.bootloader,
+                        )
 
-                elif self.bootloader == "systemd-boot":
-                    # cmd = ["bootctl", "update"]
-                    # graceful update systemd-boot
-                    cmd = ["bootctl", "--no-variables", "--graceful", "update"]
-                    event = "%s [INFO]: Running %s\n" % (
-                        datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
-                        " ".join(cmd),
-                    )
-                    self.messages_queue.put(event)
-                else:
-                    logger.error("Bootloader is empty / not supported")
+                        logger.error("%s update failed" % self.bootloader)
+                        logger.error(str(stdout_lines))
+                        self.messages_queue.put(event)
 
-                if cmd is not None:
-                    stdout_lines = []
-                    logger.info("Running %s" % " ".join(cmd))
-                    with subprocess.Popen(
-                        cmd,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
-                        bufsize=1,
-                        universal_newlines=True,
-                    ) as process:
-                        while True:
-                            if process.poll() is not None:
-                                break
-                            for line in process.stdout:
-                                stdout_lines.append(line.strip())
-                                self.messages_queue.put(line)
-                                print(line.strip())
+                        GLib.idle_add(
+                            show_mw,
+                            self,
+                            "System changes",
+                            f"<b>Kernel {self.action} failed .. attempting kernel restore</b>\n"
+                            f"There have been errors, please review the logs\n",
+                            image,
+                            priority=GLib.PRIORITY_DEFAULT,
+                        )
 
-                            # time.sleep(0.3)
-
-                        if process.returncode == 0:
-                            self.label_notify_revealer.set_text(
-                                "Bootloader %s updated" % self.bootloader
-                            )
-                            self.reveal_notify()
-
-                            logger.info("%s update completed" % self.bootloader)
-
-                            event = "%s [INFO]: %s update completed\n" % (
-                                datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
-                                self.bootloader,
-                            )
-                            self.messages_queue.put(event)
-
-                            logger.info(
-                                "Linux packages have changed a reboot is recommended"
-                            )
-                            event = "%s [INFO]: <b>#### Linux packages have changed a reboot is recommended ####</b>\n" % datetime.datetime.now().strftime(
-                                "%Y-%m-%d-%H-%M-%S"
-                            )
-                            self.messages_queue.put(event)
-
-                            if self.restore is False:
-                                GLib.idle_add(
-                                    show_mw,
-                                    self,
-                                    "System changes",
-                                    f"<b>Kernel {self.action} completed</b>\n"
-                                    f"This window can now be closed\n",
-                                    image,
-                                    priority=GLib.PRIORITY_DEFAULT,
-                                )
-                        else:
-                            if (
-                                "Skipping"
-                                or "same boot loader version in place already."
-                                in stdout_lines
-                            ):
-                                logger.info("%s update completed" % self.bootloader)
-
-                                event = "%s [INFO]: <b>%s update completed</b>\n" % (
-                                    datetime.datetime.now().strftime(
-                                        "%Y-%m-%d-%H-%M-%S"
-                                    ),
-                                    self.bootloader,
-                                )
-                                self.messages_queue.put(event)
-
-                                if self.restore is False:
-                                    GLib.idle_add(
-                                        show_mw,
-                                        self,
-                                        "System changes",
-                                        f"<b>Kernel {self.action} completed</b>\n"
-                                        f"This window can now be closed\n",
-                                        image,
-                                        priority=GLib.PRIORITY_DEFAULT,
-                                    )
-
-                            else:
-                                self.label_notify_revealer.set_text(
-                                    "Bootloader %s update failed" % self.bootloader
-                                )
-                                self.reveal_notify()
-
-                                event = "%s [ERROR]: <b>%s update failed</b>\n" % (
-                                    datetime.datetime.now().strftime(
-                                        "%Y-%m-%d-%H-%M-%S"
-                                    ),
-                                    self.bootloader,
-                                )
-
-                                logger.error("%s update failed" % self.bootloader)
-                                logger.error(str(stdout_lines))
-                                self.messages_queue.put(event)
-
-                                GLib.idle_add(
-                                    show_mw,
-                                    self,
-                                    "System changes",
-                                    f"<b>Kernel {self.action} failed .. attempting kernel restore</b>\n"
-                                    f"There have been errors, please review the logs\n",
-                                    image,
-                                    priority=GLib.PRIORITY_DEFAULT,
-                                )
-
-                else:
-                    logger.error("Bootloader update failed")
-
-                    GLib.idle_add(
-                        show_mw,
-                        self,
-                        "System changes",
-                        f"<b>Kernel {self.action} failed</b>\n"
-                        f"There have been errors, please review the logs\n",
-                        image,
-                        priority=GLib.PRIORITY_DEFAULT,
-                    )
         else:
-            logger.error("Bootloader update cannot continue, failed to set command.")
+            logger.error("Bootloader update failed")
+
+            GLib.idle_add(
+                show_mw,
+                self,
+                "System changes",
+                f"<b>Kernel {self.action} failed</b>\n"
+                f"There have been errors, please review the logs\n",
+                image,
+                priority=GLib.PRIORITY_DEFAULT,
+            )
+        # else:
+        #     logger.error("Bootloader update cannot continue, failed to set command.")
     except Exception as e:
         logger.error("Exception in update_bootloader(): %s" % e)
 

@@ -15,6 +15,8 @@ class MessageWindow(Gtk.Window):
         # self.set_title(title=title)
         self.set_modal(modal=True)
         self.set_resizable(False)
+        icon_name = "akm-tux"
+        self.set_icon_name(icon_name)
 
         header_bar = Gtk.HeaderBar()
         header_bar.set_show_title_buttons(True)
@@ -57,7 +59,7 @@ class MessageWindow(Gtk.Window):
             msg_buffer.insert(
                 msg_buffer.get_end_iter(),
                 "Event timestamp = %s\n"
-                % fn.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                % fn.datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             )
             msg_buffer.insert(msg_buffer.get_end_iter(), "%s\n" % message)
 
@@ -82,7 +84,7 @@ class MessageWindow(Gtk.Window):
         button_ok.set_halign(Gtk.Align.END)
         button_ok.connect("clicked", self.on_button_ok_clicked)
 
-        hbox_buttons = Gtk.Box.new(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        hbox_buttons = Gtk.Box.new(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
         hbox_buttons.set_halign(Gtk.Align.END)
         hbox_buttons.append(button_ok)
 

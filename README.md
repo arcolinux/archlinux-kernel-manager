@@ -1,6 +1,6 @@
 # Arch Linux Kernel Manager
 
-A GTK4 Python application used to install and remove Linux Kernels on an Arch based system.
+A GTK4 Python application which installs and removes Linux Kernels on Arch Linux based systems.
 
 Installation and removal of Kernels is carried out using Pacman.
 
@@ -20,7 +20,7 @@ Both official and un-official community based Kernels are supported.
 Since the ALA has a lot of kernel packages any versions found older than 2 years or more are ignored.
 These kernels are considerably out of date and have shown to fail to install properly with issues related to missing modules.
 
-![Official kernels](https://github.com/DeltaCopy/archlinux-kernel-manager/assets/121581829/d3e0416d-5ba8-4906-bada-835f4d949130)
+![Official kernels](https://github.com/arcolinux/archlinux-kernel-manager-dev/assets/121581829/2e30c26f-a06d-4ab9-91a7-14e1ced99389)
 
 ## What happens if a kernel installation fails
 
@@ -43,11 +43,11 @@ Most of these are sourced from the [Chaotic AUR](https://aur.chaotic.cx)
 
 See updating the [configuration file](#Adding-new-community-based-kernels) for adding new kernels.
 
-![Community kernels](https://github.com/DeltaCopy/archlinux-kernel-manager/assets/121581829/072bc9b2-cca4-4c5a-ae91-be9c0440feb3)
+![Community kernels](https://github.com/arcolinux/archlinux-kernel-manager-dev/assets/121581829/8e28de8d-35eb-45b2-b799-cd691c092852)
 
 # Installed kernels
 
-![Installed kernels](https://github.com/DeltaCopy/archlinux-kernel-manager/assets/121581829/1120c9cc-adc1-4f2c-92c5-dff8d1d1c841)
+![Installed kernels](https://github.com/arcolinux/archlinux-kernel-manager-dev/assets/121581829/75e98bd6-dd46-4c91-807c-a042cb3a3f04)
 
 # Progress window
 
@@ -75,13 +75,13 @@ By default, the application will use `bootctl` to distinguish which bootloader (
 The bootloader settings can be overridden using the Advanced settings window.
 Or you can manually update the configuration file (see the custom bootloader example).
 
-![Advanced settings](https://github.com/DeltaCopy/archlinux-kernel-manager/assets/121581829/827033b1-9250-4967-9431-e2b6205ed3a0)
+![Advanced settings](https://github.com/arcolinux/archlinux-kernel-manager-dev/assets/121581829/0a5cd26d-7991-4cea-ab43-26c36e57b135)
 
 ## Latest kernel versions
 
 Based on the latest information taken from the configured pacman mirrors.
 
-![Kernel versions](https://github.com/DeltaCopy/archlinux-kernel-manager/assets/121581829/43416b00-3759-4913-8d09-8f9083edc358)
+![Kernel versions](https://github.com/arcolinux/archlinux-kernel-manager-dev/assets/121581829/a4dccbf9-969a-4ef0-bd8c-b212f31ea2cb)
 
 # Default configuration file
 
@@ -155,12 +155,6 @@ Logs can be found inside `/var/log/archlinux-kernel-manager`
 - python-distro
 
 - python-psutil
-
-# Installing the application
-
-`wget https://raw.githubusercontent.com/DeltaCopy/archlinux-kernel-manager/main/PKGBUILD`
-
-`makepkg -si`
 
 # Running the application
 
