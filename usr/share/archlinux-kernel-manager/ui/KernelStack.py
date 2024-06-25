@@ -135,7 +135,7 @@ class KernelStack:
             label_active_installed_kernel.set_selectable(True)
 
             label_active_installed_kernel.set_markup(
-                "<b>Active kernel:</b> %s" % self.manager_gui.active_kernel
+                "Active kernel: <b>%s</b>" % self.manager_gui.active_kernel
             )
             label_active_installed_kernel.set_halign(Gtk.Align.START)
             self.manager_gui.vbox_active_installed_kernel.append(
@@ -235,7 +235,7 @@ class KernelStack:
                 label_active_kernel.set_name("label_active_kernel")
                 label_active_kernel.set_selectable(True)
                 label_active_kernel.set_markup(
-                    "<b>Active kernel:</b> %s" % self.manager_gui.active_kernel
+                    "Active kernel: <b>%s</b>" % self.manager_gui.active_kernel
                 )
                 label_active_kernel.set_halign(Gtk.Align.START)
 
@@ -250,7 +250,7 @@ class KernelStack:
 
                 self.flowbox_stacks.append(self.flowbox_official_kernel)
 
-                vbox_flowbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+                vbox_flowbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
                 vbox_flowbox.set_name("vbox_flowbox_%s" % kernel)
                 # vbox_flowbox.set_halign(align=Gtk.Align.FILL)
                 vbox_flowbox.append(self.flowbox_official_kernel)
@@ -424,7 +424,7 @@ class KernelStack:
         label_active_kernel.set_name("label_active_kernel")
         label_active_kernel.set_selectable(True)
         label_active_kernel.set_markup(
-            "<b>Active kernel:</b> %s" % self.manager_gui.active_kernel
+            "Active kernel: <b>%s</b>" % self.manager_gui.active_kernel
         )
         label_active_kernel.set_halign(Gtk.Align.START)
 
@@ -464,10 +464,18 @@ class KernelStack:
 
         label_warning = Gtk.Label(xalign=0, yalign=0)
         label_warning.set_name("label_community_warning")
-        label_warning.set_markup(
-            f"These are user produced content\n"
-            f"<b>Any use of the provided files is at your own risk</b>"
-        )
+
+        if len(self.manager_gui.community_kernels) == 0:
+            label_warning.set_markup(
+                f"<b>Cannot find any supported unofficial pacman repository's</b>\n"
+                f"<b>Add the Chaotic-AUR pacman repository to access Community based kernels</b>"
+            )
+        else:
+            label_warning.set_markup(
+                f"These kernels are user produced content\n"
+                f"These kernels may not work on your hardware\n"
+                f"<b>Any use of the provided files is at your own risk</b>"
+            )
 
         hbox_warning.append(label_warning)
 
@@ -477,6 +485,21 @@ class KernelStack:
 
             if stack_child is not None:
                 for stack_widget in stack_child:
+                    if stack_widget.get_name() == "hbox_warning":
+                        for w in stack_widget:
+                            if w.get_name() == "label_community_warning":
+                                if len(self.manager_gui.community_kernels) == 0:
+                                    w.set_markup(
+                                        f"<b>Cannot find any supported unofficial pacman repository's</b>\n"
+                                        f"<b>Add the Chaotic-AUR pacman repository to access Community based kernels</b>"
+                                    )
+                                else:
+                                    w.set_markup(
+                                        f"These kernels are user produced content\n"
+                                        f"These kernels may not work on your hardware\n"
+                                        f"<b>Any use of the provided files is at your own risk</b>"
+                                    )
+                                break
                     if stack_widget.get_name() == "label_stack_count":
                         stack_widget.set_markup(
                             "<i>%s Available kernels</i>"
@@ -495,37 +518,33 @@ class KernelStack:
                         vbox_flowbox = scrolled_window_community.get_child().get_child()
 
                         for widget in vbox_flowbox:
-                            if widget.get_name() != "vbox_no_community":
-                                widget.remove_all()
-                            else:
-                                if len(self.manager_gui.community_kernels) > 0:
-                                    # widget.hide()
-                                    for box_widget in widget:
-                                        box_widget.hide()
+                            widget.remove_all()
 
-                                    vbox_search_entry = Gtk.Box(
-                                        orientation=Gtk.Orientation.VERTICAL, spacing=5
-                                    )
+                        # scrolled_window_community.hide()
 
-                                    vbox_search_entry.append(search_entry_community)
-                                    # widget.append(hbox_warning)
-                                    widget.append(vbox_search_entry)
+                        # vbox_search_entry = Gtk.Box(
+                        #     orientation=Gtk.Orientation.VERTICAL, spacing=5
+                        # )
+                        #
+                        # vbox_search_entry.append(search_entry_community)
+                        # widget.append(vbox_search_entry)
 
-                self.flowbox_community = FlowBox(
-                    self.manager_gui.community_kernels,
-                    self.manager_gui.active_kernel,
-                    self.manager_gui,
-                    "community",
-                )
-                vbox_flowbox.append(self.flowbox_community)
+                        if len(self.manager_gui.community_kernels) > 0:
+                            self.flowbox_community = FlowBox(
+                                self.manager_gui.community_kernels,
+                                self.manager_gui.active_kernel,
+                                self.manager_gui,
+                                "community",
+                            )
+                            vbox_flowbox.append(self.flowbox_community)
 
-            while self.manager_gui.default_context.pending():
-                # fn.time.sleep(0.1)
-                self.manager_gui.default_context.iteration(True)
+            # while self.manager_gui.default_context.pending():
+            #     # fn.time.sleep(0.1)
+            #     self.manager_gui.default_context.iteration(True)
         else:
             self.flowbox_community = None
 
-            vbox_flowbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+            vbox_flowbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
             # vbox_flowbox.set_halign(align=Gtk.Align.FILL)
 
             if len(self.manager_gui.community_kernels) == 0:
@@ -619,6 +638,7 @@ class KernelStack:
 
                 if vbox_search_entry is not None:
                     vbox_kernels.append(vbox_search_entry)
+
                 vbox_kernels.append(hbox_sep_kernels)
 
                 scrolled_window_community.set_child(vbox_flowbox)

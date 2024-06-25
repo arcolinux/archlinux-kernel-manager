@@ -54,7 +54,6 @@ class FlowBox(Gtk.FlowBox):
     def flowbox_community(self):
         for community_kernel in self.kernel:
             self.kernels.append(community_kernel)
-
             self.kernel_count += 1
 
         if len(self.kernels) > 0:

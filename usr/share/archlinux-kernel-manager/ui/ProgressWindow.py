@@ -1,3 +1,4 @@
+import random
 import sys
 import gi
 import os
@@ -26,7 +27,7 @@ class ProgressWindow(Gtk.Window):
         self.set_title(title=title)
         self.set_modal(modal=True)
         self.set_resizable(True)
-        self.set_size_request(700, 400)
+        self.set_size_request(700, 300)
         self.connect("close-request", self.on_close)
 
         self.textview = textview
@@ -34,9 +35,19 @@ class ProgressWindow(Gtk.Window):
 
         self.kernel_state_queue = fn.Queue()
         self.messages_queue = fn.Queue()
+
+        # create temp file to lock the close button
+        self.lockfile = "/tmp/.akm-progress.lock"
+        if os.path.exists(self.lockfile):
+            os.unlink(self.lockfile)
+
+        with open(self.lockfile, "w") as f:
+            f.write("")
+
         self.kernel = kernel
         self.timeout_id = None
         self.errors_found = False
+        self.restore_kernel = None
 
         self.action = action
         self.switch = switch
@@ -164,10 +175,10 @@ class ProgressWindow(Gtk.Window):
             )
 
         self.hbox_spinner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        self.hbox_spinner.append(self.label_spinner_progress)
         self.hbox_spinner.append(self.spinner)
+        self.hbox_spinner.append(self.label_spinner_progress)
 
-        vbox_padding = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
+        vbox_padding = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         vbox_padding.set_valign(Gtk.Align.END)
 
         label_padding = Gtk.Label(xalign=0, yalign=0)
@@ -220,7 +231,7 @@ class ProgressWindow(Gtk.Window):
         vbox_progress.append(self.scrolled_window)
         vbox_progress.append(self.hbox_spinner)
         vbox_progress.append(self.label_status)
-        vbox_progress.append(vbox_padding)
+        # vbox_progress.append(vbox_padding)
         vbox_progress.append(hbox_button_close)
 
         self.present()
@@ -401,7 +412,7 @@ class ProgressWindow(Gtk.Window):
         self.timeout_id = GLib.timeout_add(3000, self.timeout)
 
     def on_button_close_response(self, widget):
-        if fn.check_pacman_process(self):
+        if fn.check_pacman_process(self) or os.path.exists(self.lockfile):
             mw = MessageWindow(
                 title="Pacman process running",
                 message="Pacman is busy processing a transaction .. please wait",
@@ -415,7 +426,7 @@ class ProgressWindow(Gtk.Window):
             self.destroy()
 
     def on_close(self, data):
-        if fn.check_pacman_process(self):
+        if fn.check_pacman_process(self) or os.path.exists(self.lockfile):
             mw = MessageWindow(
                 title="Pacman process running",
                 message="Pacman is busy processing a transaction .. please wait",
@@ -468,18 +479,22 @@ class ProgressWindow(Gtk.Window):
 
                         # undo action here if action == install
 
-                        event = (
-                            "%s<b> [INFO]: Attempting to undo previous Linux package changes</b>\n"
-                            % (
-                                fn.datetime.datetime.now().strftime(
-                                    "%Y-%m-%d-%H-%M-%S"
-                                ),
+                        if (
+                            action == "install"
+                            and self.restore_kernel is not None
+                            and self.source == "official"
+                        ):
+                            event = (
+                                "%s<b> [INFO]: Attempting to undo previous Linux package changes</b>\n"
+                                % (
+                                    fn.datetime.datetime.now().strftime(
+                                        "%Y-%m-%d-%H-%M-%S"
+                                    ),
+                                )
                             )
-                        )
 
-                        self.messages_queue.put(event)
+                            self.messages_queue.put(event)
 
-                        if action == "install" and self.restore_kernel is not None:
                             self.restore = True
                             fn.logger.info(
                                 "Installation failed, attempting removal of previous Linux package changes"
@@ -523,14 +538,19 @@ class ProgressWindow(Gtk.Window):
                                 f"<span foreground='orange'><b>Kernel %s failed - see logs above</b></span>\n"
                                 % action
                             )
+                        else:
 
-                    # self.spinner.set_spinning(False)
-                    # self.hbox_spinner.hide()
-                    #
-                    # self.label_progress_window_desc.set_markup(
-                    #     f"<b>This window can be now closed</b>\n"
-                    #     f"<b>A reboot is recommended when Linux packages have changed</b>"
-                    # )
+                            self.spinner.set_spinning(False)
+                            self.hbox_spinner.hide()
+
+                            self.set_title("Kernel installation failed")
+                            self.label_title.set_markup("<b>Install failed</b>")
+
+                            #
+                            # self.label_progress_window_desc.set_markup(
+                            #     f"<b>This window can be now closed</b>\n"
+                            #     f"<b>A reboot is recommended when Linux packages have changed</b>"
+                            # )
 
                     # break
                 else:
@@ -597,6 +617,8 @@ class ProgressWindow(Gtk.Window):
                     break
             except Exception as e:
                 fn.logger.error("Exception in check_kernel_state(): %s" % e)
+                if os.path.exists(self.lockfile):
+                    os.unlink(self.lockfile)
 
             finally:
                 self.kernel_state_queue.task_done()

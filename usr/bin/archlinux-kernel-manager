@@ -72,9 +72,9 @@ case "$SESSION" in
       start_in_tty
     ;;
     *)
-      # anything here is an unknown session, most likely AKM will fail to load
+      # anything here is an unknown session, fallback to XDG_SESSION_TYPE
       echo "[INFO]: Display = $DISPLAY"
-      echo "[INFO]: Session could not be verified ... falling back to use XDG_SESSION_TYPE"
+      echo "[WARN]: Session could not be verified, using XDG_SESSION_TYPE"
 
       case "$XDG_SESSION_TYPE" in
         "wayland")

@@ -57,7 +57,7 @@ box#vbox_header{
 }
 
 box#hbox_warning{
-    background-color: #4c8bf5;
+    background-color: #004085;
     color: white;
     font-family: 'Noto Sans', 'Helvetica', sans-serif;
     padding: 5px 5px 5px 5px;
@@ -72,7 +72,7 @@ label#label_notify_revealer{
 
 label#label_active_kernel {
     font-family: 'Noto Sans', 'Helvetica', sans-serif;
-    font-size: 11px;
+    font-size: 12px;
 }
 
 label#label_stack_kernel {

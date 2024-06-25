@@ -180,8 +180,6 @@ class SettingsWindow(Gtk.Window):
             vbox_community_warning = Gtk.Box(
                 orientation=Gtk.Orientation.VERTICAL, spacing=10
             )
-            vbox_community_warning.set_name("box")
-
             image_warning = Gtk.Image.new_from_file(
                 os.path.join(base_dir, "images/48x48/akm-warning.png")
             )
@@ -190,14 +188,15 @@ class SettingsWindow(Gtk.Window):
             image_warning.set_halign(Gtk.Align.START)
 
             hbox_warning = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-            hbox_warning.set_name("box")
+            hbox_warning.set_name("hbox_warning")
 
             hbox_warning.append(image_warning)
 
             label_pacman_no_community = Gtk.Label(xalign=0, yalign=0)
+            label_pacman_no_community.set_name("label_community_warning")
             label_pacman_no_community.set_markup(
                 f"<b>Cannot find any supported unofficial pacman repository's</b>\n"
-                f"Add unofficial pacman repository's to use community based kernels"
+                f"<b>Add the Chaotic-AUR pacman repository to access Community based kernels</b>"
             )
 
             hbox_warning.append(label_pacman_no_community)
@@ -459,7 +458,7 @@ class SettingsWindow(Gtk.Window):
         while True:
             self.kernel_versions = self.kernel_versions_queue.get()
 
-            if self.kernel_versions is not None:
+            if self.kernel_versions is not None and len(self.kernel_versions) > 0:
                 break
 
         self.kernel_versions_queue.task_done()

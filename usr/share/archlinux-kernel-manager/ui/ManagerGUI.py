@@ -29,6 +29,7 @@ class ManagerGUI(Gtk.ApplicationWindow):
             self.app_version = "dev"
 
         fn.logger.info("Version = %s" % self.app_version)
+        fn.logger.info("Distro = %s" % fn.distro.id())
 
         self.set_title(app_name)
         self.set_resizable(True)
@@ -47,6 +48,20 @@ class ManagerGUI(Gtk.ApplicationWindow):
         # community kernels queue for threading
         self.queue_community_kernels = fn.Queue()
 
+        self.splash_screen = SplashScreen(app_name)
+
+        while self.default_context.pending():
+            fn.time.sleep(0.1)
+            self.default_context.iteration(True)
+
+        try:
+            fn.Thread(
+                target=self.wait_for_gui_load,
+                daemon=True,
+            ).start()
+        except Exception as e:
+            fn.logger.error(e)
+
         hbox_notify_revealer = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL, spacing=20
         )
@@ -62,19 +77,9 @@ class ManagerGUI(Gtk.ApplicationWindow):
 
         hbox_notify_revealer.append(self.label_notify_revealer)
 
-        self.splash_screen = SplashScreen(app_name)
-
-        try:
-            fn.Thread(
-                target=self.wait_for_gui_load,
-                daemon=True,
-            ).start()
-        except Exception as e:
-            fn.logger.error(e)
-
-        while self.default_context.pending():
-            fn.time.sleep(0.1)
-            self.default_context.iteration(True)
+        # while self.default_context.pending():
+        #     fn.time.sleep(0.1)
+        #     self.default_context.iteration(True)
 
         self.bootloader = None
         self.bootloader_grub_cfg = None
@@ -276,30 +281,6 @@ class ManagerGUI(Gtk.ApplicationWindow):
             self.official_kernels = self.queue_kernels.get()
             self.queue_kernels.task_done()
 
-        fn.logger.info("Starting pacman db synchronization thread")
-        self.queue_load_progress.put("Starting pacman db synchronization")
-
-        self.pacman_db_sync()
-
-        fn.logger.info("Starting get community kernels thread")
-        self.queue_load_progress.put("Getting community based Linux kernels")
-
-        try:
-            thread_get_community_kernels = fn.Thread(
-                name=fn.thread_get_community_kernels,
-                target=fn.get_community_kernels,
-                daemon=True,
-                args=(self,),
-            )
-
-            thread_get_community_kernels.start()
-
-        except Exception as e:
-            fn.logger.error("Exception in thread_get_community_kernels: %s" % e)
-        finally:
-            self.community_kernels = self.queue_community_kernels.get()
-            self.queue_community_kernels.task_done()
-
     # =====================================================
     #               PACMAN DB SYNC
     # =====================================================
@@ -339,8 +320,9 @@ class ManagerGUI(Gtk.ApplicationWindow):
     # keep splash screen open, until main gui is loaded
     def wait_for_gui_load(self):
         while True:
-            fn.time.sleep(0.2)
+            # fn.time.sleep(0.2)
             status = self.queue_load_progress.get()
+
             if status == 1:
                 GLib.idle_add(
                     self.splash_screen.destroy,
@@ -384,6 +366,26 @@ class ManagerGUI(Gtk.ApplicationWindow):
         self.installed_kernels = None
 
         self.start_get_kernels_threads()
+
+        self.pacman_db_sync()
+
+        fn.logger.debug("Adding community kernels to UI")
+
+        try:
+            thread_get_community_kernels = fn.Thread(
+                name=fn.thread_get_community_kernels,
+                target=fn.get_community_kernels,
+                daemon=True,
+                args=(self,),
+            )
+
+            thread_get_community_kernels.start()
+
+        except Exception as e:
+            fn.logger.error("Exception in thread_get_community_kernels: %s" % e)
+        finally:
+            self.community_kernels = self.queue_community_kernels.get()
+            self.queue_community_kernels.task_done()
 
         self.installed_kernels = fn.get_installed_kernels()
 
@@ -499,10 +501,37 @@ class ManagerGUI(Gtk.ApplicationWindow):
         # add official kernel flowbox
 
         fn.logger.debug("Adding official kernels to UI")
+
         self.kernel_stack.add_official_kernels_to_stack(reload=False)
 
+        # fn.logger.debug("Adding community kernels to UI")
+        # self.kernel_stack.add_community_kernels_to_stack(reload=False)
+
+        self.queue_load_progress.put(1)
+
+        fn.logger.info("Starting pacman db synchronization")
+
+        self.pacman_db_sync()
+
         fn.logger.debug("Adding community kernels to UI")
-        self.kernel_stack.add_community_kernels_to_stack(reload=False)
+
+        try:
+            thread_get_community_kernels = fn.Thread(
+                name=fn.thread_get_community_kernels,
+                target=fn.get_community_kernels,
+                daemon=True,
+                args=(self,),
+            )
+
+            thread_get_community_kernels.start()
+
+        except Exception as e:
+            fn.logger.error("Exception in thread_get_community_kernels: %s" % e)
+        finally:
+            self.community_kernels = self.queue_community_kernels.get()
+            self.queue_community_kernels.task_done()
+            fn.logger.debug("Adding community kernels to UI")
+            self.kernel_stack.add_community_kernels_to_stack(reload=False)
 
         fn.logger.debug("Adding installed kernels to UI")
         self.kernel_stack.add_installed_kernels_to_stack(reload=False)
@@ -510,7 +539,4 @@ class ManagerGUI(Gtk.ApplicationWindow):
         while self.default_context.pending():
             self.default_context.iteration(True)
 
-            fn.time.sleep(0.3)
-
-        self.queue_load_progress.put(1)
-        fn.logger.info("Kernel manager UI loaded")
+            fn.time.sleep(0.1)

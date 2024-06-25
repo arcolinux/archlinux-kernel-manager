@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import os
-
 import gi
 import signal
 import libs.functions as fn
@@ -18,8 +17,9 @@ app_name = "Arch Linux Kernel Manager"
 app_version = "${app_version}"
 app_name_dir = "archlinux-kernel-manager"
 app_id = "com.arcolinux.kernelmanager"
-lock_file = "/tmp/akm.lock"
-pid_file = "/tmp/akm.pid"
+lock_file = "/tmp/.akm.lock"
+progress_lock_file = "/tmp/.akm-progress.lock"
+pid_file = "/tmp/.akm.pid"
 
 
 class Main(Gtk.Application):
@@ -61,6 +61,8 @@ class Main(Gtk.Application):
             os.remove(lock_file)
         if os.path.exists(pid_file):
             os.remove(pid_file)
+        if os.path.exists(progress_lock_file):
+            os.remove(progress_lock_file)
 
 
 def signal_handler(sig, frame):

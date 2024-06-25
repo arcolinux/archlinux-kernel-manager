@@ -1,4 +1,4 @@
-# Store kernel data taken from
+# Store kernel data from ALA, pacman sync db
 import datetime
 from datetime import datetime
 
