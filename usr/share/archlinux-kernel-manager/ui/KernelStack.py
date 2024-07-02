@@ -465,7 +465,10 @@ class KernelStack:
         label_warning = Gtk.Label(xalign=0, yalign=0)
         label_warning.set_name("label_community_warning")
 
-        if len(self.manager_gui.community_kernels) == 0:
+        if (
+            self.manager_gui.community_kernels is not None
+            and len(self.manager_gui.community_kernels) == 0
+        ):
             label_warning.set_markup(
                 f"<b>Cannot find any supported unofficial pacman repository's</b>\n"
                 f"<b>Add the Chaotic-AUR pacman repository to access Community based kernels</b>"
@@ -529,7 +532,10 @@ class KernelStack:
                         # vbox_search_entry.append(search_entry_community)
                         # widget.append(vbox_search_entry)
 
-                        if len(self.manager_gui.community_kernels) > 0:
+                        if (
+                            self.manager_gui.community_kernels is not None
+                            and len(self.manager_gui.community_kernels) > 0
+                        ):
                             self.flowbox_community = FlowBox(
                                 self.manager_gui.community_kernels,
                                 self.manager_gui.active_kernel,

@@ -28,9 +28,6 @@ class ManagerGUI(Gtk.ApplicationWindow):
         if self.app_version == "${app_version}":
             self.app_version = "dev"
 
-        fn.logger.info("Version = %s" % self.app_version)
-        fn.logger.info("Distro = %s" % fn.distro.id())
-
         self.set_title(app_name)
         self.set_resizable(True)
         self.set_default_size(950, 650)
@@ -50,10 +47,6 @@ class ManagerGUI(Gtk.ApplicationWindow):
 
         self.splash_screen = SplashScreen(app_name)
 
-        while self.default_context.pending():
-            fn.time.sleep(0.1)
-            self.default_context.iteration(True)
-
         try:
             fn.Thread(
                 target=self.wait_for_gui_load,
@@ -61,6 +54,10 @@ class ManagerGUI(Gtk.ApplicationWindow):
             ).start()
         except Exception as e:
             fn.logger.error(e)
+
+        while self.default_context.pending():
+            fn.time.sleep(0.1)
+            self.default_context.iteration(True)
 
         hbox_notify_revealer = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL, spacing=20
@@ -87,6 +84,9 @@ class ManagerGUI(Gtk.ApplicationWindow):
         # self.bootloader = fn.get_boot_loader()
 
         config_data = fn.setup_config(self)
+
+        fn.logger.info("Version = %s" % self.app_version)
+        fn.logger.info("Distro = %s" % fn.distro.id())
 
         if "bootloader" in config_data.keys():
             if config_data["bootloader"]["name"] is not None:
@@ -185,10 +185,10 @@ class ManagerGUI(Gtk.ApplicationWindow):
             self.vbox.append(self.notify_revealer)
 
             self.installed_kernels = fn.get_installed_kernels()
+            if self.installed_kernels is not None:
+                fn.logger.info("Installed kernels = %s" % len(self.installed_kernels))
 
             self.active_kernel = fn.get_active_kernel()
-
-            fn.logger.info("Installed kernels = %s" % len(self.installed_kernels))
 
             self.refresh_cache = False
 
@@ -207,7 +207,6 @@ class ManagerGUI(Gtk.ApplicationWindow):
                     message=f"The specified Grub config file: {self.bootloader_grub_cfg} does not exist\n"
                     f"This will cause an issue when updating the bootloader\n"
                     f"Update the configuration file/use the Advanced Settings to change this\n",
-                    image_path="images/48x48/akm-error.png",
                     detailed_message=False,
                     transient_for=self,
                 )
@@ -222,7 +221,6 @@ class ManagerGUI(Gtk.ApplicationWindow):
                         message=f"Cannot select systemd-boot, UEFI boot mode is not available\n"
                         f"Update the configuration file\n"
                         f"Or use the Advanced Settings to change this\n",
-                        image_path="images/48x48/akm-warning.png",
                         detailed_message=False,
                         transient_for=self,
                     )
@@ -289,28 +287,26 @@ class ManagerGUI(Gtk.ApplicationWindow):
         sync_err = fn.sync_package_db()
 
         if sync_err is not None:
-            fn.logger.error("Pacman db synchronization failed")
-
-            print(
-                "---------------------------------------------------------------------------"
-            )
+            # fn.logger.error("Pacman db synchronization failed")
 
             GLib.idle_add(
-                self.show_sync_db_message_dialog,
+                self.show_sync_window,
                 sync_err,
                 priority=GLib.PRIORITY_DEFAULT,
             )
 
+            return False
+
         else:
             fn.logger.info("Pacman DB synchronization completed")
+            return True
 
-    def show_sync_db_message_dialog(self, sync_err):
+    def show_sync_window(self, sync_err):
         mw = MessageWindow(
             title="Error - Pacman db synchronization",
             message=f"Pacman db synchronization failed\n"
             f"Failed to run 'pacman -Syu'\n"
             f"{sync_err}\n",
-            image_path="images/48x48/akm-warning.png",
             transient_for=self,
             detailed_message=True,
         )
@@ -367,25 +363,27 @@ class ManagerGUI(Gtk.ApplicationWindow):
 
         self.start_get_kernels_threads()
 
-        self.pacman_db_sync()
+        if self.pacman_db_sync() is False:
+            fn.logger.error("Pacman DB synchronization failed")
+        else:
 
-        fn.logger.debug("Adding community kernels to UI")
+            fn.logger.debug("Adding community kernels to UI")
 
-        try:
-            thread_get_community_kernels = fn.Thread(
-                name=fn.thread_get_community_kernels,
-                target=fn.get_community_kernels,
-                daemon=True,
-                args=(self,),
-            )
+            try:
+                thread_get_community_kernels = fn.Thread(
+                    name=fn.thread_get_community_kernels,
+                    target=fn.get_community_kernels,
+                    daemon=True,
+                    args=(self,),
+                )
 
-            thread_get_community_kernels.start()
+                thread_get_community_kernels.start()
 
-        except Exception as e:
-            fn.logger.error("Exception in thread_get_community_kernels: %s" % e)
-        finally:
-            self.community_kernels = self.queue_community_kernels.get()
-            self.queue_community_kernels.task_done()
+            except Exception as e:
+                fn.logger.error("Exception in thread_get_community_kernels: %s" % e)
+            finally:
+                self.community_kernels = self.queue_community_kernels.get()
+                self.queue_community_kernels.task_done()
 
         self.installed_kernels = fn.get_installed_kernels()
 
@@ -507,36 +505,39 @@ class ManagerGUI(Gtk.ApplicationWindow):
         # fn.logger.debug("Adding community kernels to UI")
         # self.kernel_stack.add_community_kernels_to_stack(reload=False)
 
-        self.queue_load_progress.put(1)
-
         fn.logger.info("Starting pacman db synchronization")
 
-        self.pacman_db_sync()
+        if self.pacman_db_sync() is False:
+            fn.logger.error("Pacman DB synchronization failed")
+        else:
 
-        fn.logger.debug("Adding community kernels to UI")
-
-        try:
-            thread_get_community_kernels = fn.Thread(
-                name=fn.thread_get_community_kernels,
-                target=fn.get_community_kernels,
-                daemon=True,
-                args=(self,),
-            )
-
-            thread_get_community_kernels.start()
-
-        except Exception as e:
-            fn.logger.error("Exception in thread_get_community_kernels: %s" % e)
-        finally:
-            self.community_kernels = self.queue_community_kernels.get()
-            self.queue_community_kernels.task_done()
             fn.logger.debug("Adding community kernels to UI")
-            self.kernel_stack.add_community_kernels_to_stack(reload=False)
+
+            try:
+                thread_get_community_kernels = fn.Thread(
+                    name=fn.thread_get_community_kernels,
+                    target=fn.get_community_kernels,
+                    daemon=True,
+                    args=(self,),
+                )
+
+                thread_get_community_kernels.start()
+
+            except Exception as e:
+                fn.logger.error("Exception in thread_get_community_kernels: %s" % e)
+            finally:
+                self.community_kernels = self.queue_community_kernels.get()
+                self.queue_community_kernels.task_done()
+
+                self.kernel_stack.add_community_kernels_to_stack(reload=False)
+
+                while self.default_context.pending():
+
+                    self.default_context.iteration(True)
+
+                    fn.time.sleep(0.3)
+
+        self.queue_load_progress.put(1)
 
         fn.logger.debug("Adding installed kernels to UI")
         self.kernel_stack.add_installed_kernels_to_stack(reload=False)
-
-        while self.default_context.pending():
-            self.default_context.iteration(True)
-
-            fn.time.sleep(0.1)

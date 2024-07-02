@@ -25,7 +25,7 @@ class Kernel:
             .date()
         )
 
-        if datetime_value_other > datetime_value_self:
+        if datetime_value_other >= datetime_value_self:
             return datetime_value_other
 
 

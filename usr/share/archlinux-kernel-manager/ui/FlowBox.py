@@ -273,6 +273,8 @@ class FlowBox(Gtk.FlowBox):
         )
         message = None
         title = None
+        downgrade = False
+        community_repo = False
 
         if fn.check_pacman_lockfile() is False:
             # switch widget is currently toggled off
@@ -284,38 +286,65 @@ class FlowBox(Gtk.FlowBox):
                                 inst_kernel.version
                                 > kernel.version.split("%s-" % inst_kernel.name)[1]
                             ):
+                                downgrade = True
                                 title = "Downgrading %s kernel" % kernel.name
                             else:
+                                downgrade = False
                                 title = "Upgrading %s kernel" % kernel.name
 
                         break
 
                 if title is None:
-                    title = "Kernel install"
+                    title = "Kernel installation"
 
                 if self.source == "community":
-                    message = "This will install <b>%s-%s</b> - Is this ok ?" % (
+                    message = (
+                        "<span foreground='orange'><b>Community kernel selected - this may break your system</b></span>\n"
+                        "Confirm the install of <b>%s-%s</b>"
+                        % (
+                            kernel.name,
+                            kernel.version,
+                        )
+                    )
+
+                    # check if the community pacman repo is configured
+                    if fn.check_pacman_repo(kernel.repository) is True:
+                        community_repo = True
+                    else:
+                        community_repo = False
+                        fn.logger.error(
+                            "%s pacman repo is not configured" % kernel.repository
+                        )
+
+                elif self.source == "official":
+                    message = "Confirm the install of <b>%s-%s</b>" % (
                         kernel.name,
                         kernel.version,
                     )
-                elif self.source == "official":
-                    message = (
-                        "This will install <b>%s</b> - Is this ok ?" % kernel.version
-                    )
 
-                message_window = FlowBoxMessageWindow(
-                    title=title,
-                    message=message,
-                    action="install",
-                    kernel=kernel,
-                    transient_for=self.manager_gui,
-                    textview=self.manager_gui.textview,
-                    textbuffer=self.manager_gui.textbuffer,
-                    switch=switch,
-                    source=self.source,
-                    manager_gui=self.manager_gui,
-                )
-                message_window.present()
+                if community_repo is False and self.source == "community":
+                    mw = MessageWindow(
+                        title="Cannot find %s pacman repo" % kernel.repository,
+                        message="Enable the pacman repository then retry the installation",
+                        transient_for=self.manager_gui,
+                        detailed_message=False,
+                    )
+                    mw.present()
+                else:
+                    message_window = FlowBoxMessageWindow(
+                        title=title,
+                        message=message,
+                        action="install",
+                        kernel=kernel,
+                        transient_for=self.manager_gui,
+                        textview=self.manager_gui.textview,
+                        textbuffer=self.manager_gui.textbuffer,
+                        switch=switch,
+                        source=self.source,
+                        manager_gui=self.manager_gui,
+                        downgrade=downgrade,
+                    )
+                    message_window.present()
                 return True
 
             # switch widget is currently toggled on
@@ -327,17 +356,18 @@ class FlowBox(Gtk.FlowBox):
                 if len(installed_kernels) > 1:
 
                     if self.source == "community":
-                        message = "This will remove <b>%s-%s</b> - Is this ok ?" % (
+                        message = "Confirm the removal of <b>%s-%s</b>" % (
                             kernel.name,
                             kernel.version,
                         )
                     elif self.source == "official":
-                        message = (
-                            "This will remove <b>%s</b> - Is this ok ?" % kernel.version
+                        message = "Confirm the removal of <b>%s-%s</b>" % (
+                            kernel.name,
+                            kernel.version,
                         )
 
                     message_window = FlowBoxMessageWindow(
-                        title="Kernel uninstall",
+                        title="Kernel uninstallation",
                         message=message,
                         action="uninstall",
                         kernel=kernel,
@@ -347,6 +377,7 @@ class FlowBox(Gtk.FlowBox):
                         switch=switch,
                         source=self.source,
                         manager_gui=self.manager_gui,
+                        downgrade=downgrade,
                     )
                     message_window.present()
                     return True
@@ -361,7 +392,6 @@ class FlowBox(Gtk.FlowBox):
                         title="Warning: Uninstall aborted",
                         message=f"You only have 1 kernel installed\n"
                         f"<b>{kernel.name} {kernel.version}</b> is currently active\n",
-                        image_path="images/48x48/akm-remove.png",
                         transient_for=self.manager_gui,
                         detailed_message=False,
                     )
@@ -378,7 +408,6 @@ class FlowBox(Gtk.FlowBox):
                 message="Pacman lockfile found, which indicates another pacman process is running",
                 transient_for=self.manager_gui,
                 detailed_message=False,
-                image_path="images/48x48/akm-warning.png",
             )
             msg_win.present()
             return True
@@ -496,6 +525,7 @@ class FlowBoxInstalled(Gtk.FlowBox):
                 switch=None,
                 source=None,
                 manager_gui=self.manager_gui,
+                downgrade=None,
             )
             message_window.present()
         else:
@@ -507,7 +537,6 @@ class FlowBoxInstalled(Gtk.FlowBox):
                 title="Warning: Uninstall aborted",
                 message=f"You only have 1 kernel installed\n"
                 f"<b>{installed_kernel.name} {installed_kernel.version}</b>\n",
-                image_path="images/48x48/akm-remove.png",
                 transient_for=self.manager_gui,
                 detailed_message=False,
             )
@@ -526,6 +555,7 @@ class FlowBoxMessageWindow(Gtk.Window):
         switch,
         source,
         manager_gui,
+        downgrade,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -552,6 +582,7 @@ class FlowBoxMessageWindow(Gtk.Window):
         self.action = action
         self.switch = switch
         self.source = source
+        self.downgrade = downgrade
 
         vbox_flowbox_message = Gtk.Box.new(
             orientation=Gtk.Orientation.VERTICAL, spacing=10

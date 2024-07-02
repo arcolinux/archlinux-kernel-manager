@@ -491,7 +491,6 @@ class SettingsWindow(Gtk.Window):
                     mw = MessageWindow(
                         title="Legacy boot detected",
                         message="Cannot select systemd-boot, UEFI boot mode is not available",
-                        image_path="images/48x48/akm-warning.png",
                         transient_for=self,
                         detailed_message=False,
                     )
@@ -544,7 +543,6 @@ class SettingsWindow(Gtk.Window):
                             % self.text_entry_bootloader_file.get_buffer()
                             .get_text()
                             .strip(),
-                            image_path="images/48x48/akm-warning.png",
                             transient_for=self,
                             detailed_message=False,
                         )

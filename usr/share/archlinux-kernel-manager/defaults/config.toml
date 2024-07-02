@@ -25,6 +25,10 @@ community = [
     { name = "linux-nitrous", description = "Modified Linux kernel optimized for Skylake and newer, compiled using clang", headers = "linux-nitrous-headers", repository = "chaotic-aur" },
 ]
 
+[logging]
+# Logging is either info or debug
+loglevel = "info"
+
 # Custom bootloader example
 # Only systemd-boot or grub are valid names
 # When using grub also set grub_config

@@ -47,7 +47,6 @@ supported_kernels_dict = {}
 community_kernels_dict = {}
 pacman_repos_list = []
 process_timeout = 200
-
 sudo_username = os.getlogin()
 home = "/home/" + str(sudo_username)
 
@@ -59,6 +58,9 @@ pacman_lockfile = "/var/lib/pacman/db.lck"
 
 # pacman conf file
 pacman_conf_file = "/etc/pacman.conf"
+
+# pacman cach dir
+pacman_cache = "/var/cache/pacman/pkg"
 
 # thread names
 thread_get_kernels = "thread_get_kernels"
@@ -83,14 +85,11 @@ config_file_default = "%s/defaults/config.toml" % base_dir
 config_dir = "%s/.config/archlinux-kernel-manager" % home
 config_file = "%s/.config/archlinux-kernel-manager/config.toml" % home
 
+
 logger = logging.getLogger("logger")
 
 # create console handler and set level to debug
 ch = logging.StreamHandler()
-
-
-logger.setLevel(logging.DEBUG)
-ch.setLevel(logging.DEBUG)
 
 # create formatter
 formatter = logging.Formatter(
@@ -190,26 +189,26 @@ def get_latest_kernel_updates(self):
                                         response.json()["results"][0]["last_update"],
                                         "%Y-%m-%dT%H:%M:%S.%f%z",
                                     ).date()
-                                ) > (
+                                ) >= (
                                     datetime.datetime.strptime(
                                         cache_timestamp, "%Y-%m-%d %H-%M-%S"
                                     ).date()
                                 ):
-                                    logger.info(
-                                        "Linux kernel package updated, cache refresh required"
-                                    )
+                                    logger.info("Linux kernel package updated")
 
                                     refresh_cache(self)
 
                                     return True
 
                                 else:
-                                    logger.info(
-                                        "Linux kernel package not updated, cache refresh not required"
-                                    )
+                                    logger.info("Linux kernel package not updated")
 
                                     return False
+                else:
+                    logger.error("Failed to get valid response to check kernel update")
+                    logger.error(response.text)
 
+                    return False
             else:
                 logger.info("Kernel update check not required")
 
@@ -327,24 +326,48 @@ def update_config(config_data, bootloader):
 
 def read_config(self):
     try:
-        logger.debug("Config file = %s" % config_file)
-        logger.info("Reading in config file")
+        logger.info("Reading in config file %s" % config_file)
         config_data = None
         with open(config_file, "rb") as f:
             config_data = tomlkit.load(f)
 
-            for official_kernel in config_data["kernels"]["official"]:
-                supported_kernels_dict[official_kernel["name"]] = (
-                    official_kernel["description"],
-                    official_kernel["headers"],
-                )
+            if (
+                config_data.get("kernels")
+                and "official" in config_data["kernels"] is not None
+            ):
+                for official_kernel in config_data["kernels"]["official"]:
+                    supported_kernels_dict[official_kernel["name"]] = (
+                        official_kernel["description"],
+                        official_kernel["headers"],
+                    )
 
-            for community_kernel in config_data["kernels"]["community"]:
-                community_kernels_dict[community_kernel["name"]] = (
-                    community_kernel["description"],
-                    community_kernel["headers"],
-                    community_kernel["repository"],
-                )
+            if (
+                config_data.get("kernels")
+                and "community" in config_data["kernels"] is not None
+            ):
+                for community_kernel in config_data["kernels"]["community"]:
+                    community_kernels_dict[community_kernel["name"]] = (
+                        community_kernel["description"],
+                        community_kernel["headers"],
+                        community_kernel["repository"],
+                    )
+
+            if (
+                config_data.get("logging") is not None
+                and "loglevel" in config_data["logging"] is not None
+            ):
+
+                loglevel = config_data["logging"]["loglevel"].lower()
+                logger.info("Setting loglevel to %s" % loglevel)
+                if loglevel == "debug":
+                    logger.setLevel(logging.DEBUG)
+                elif loglevel == "info":
+                    logger.setLevel(logging.INFO)
+                else:
+                    logger.warning("Invalid logging level set, use info / debug")
+                    logger.setLevel(logging.INFO)
+            else:
+                logger.setLevel(logging.INFO)
 
         return config_data
     except Exception as e:
@@ -406,6 +429,16 @@ def write_cache():
 # install from the ALA
 def install_archive_kernel(self):
     try:
+        # package cache
+        logger.debug("Cleaning pacman cache, removing official packages")
+        if os.path.exists(pacman_cache):
+            for root, dirs, files in os.walk(pacman_cache):
+                for name in files:
+                    for official_kernel in supported_kernels_dict.keys():
+                        if name.startswith(official_kernel):
+                            if os.path.exists(os.path.join(root, name)):
+                                os.remove(os.path.join(root, name))
+
         install_cmd_str = [
             "pacman",
             "-U",
@@ -424,14 +457,14 @@ def install_archive_kernel(self):
             " ".join(install_cmd_str),
         )
 
-        event_log = []
+        error = False
+
         self.messages_queue.put(event)
 
         with subprocess.Popen(
             install_cmd_str,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            bufsize=1,
             universal_newlines=True,
             env=locale_env,
         ) as process:
@@ -439,96 +472,62 @@ def install_archive_kernel(self):
                 if process.poll() is not None:
                     break
                 for line in process.stdout:
-                    print(line.strip())
+                    if logger.getEffectiveLevel() == 10:
+                        print(line.strip())
                     self.messages_queue.put(line)
-                    event_log.append(line.lower().strip())
-
-                time.sleep(0.3)
-
-        error = None
-
-        if (
-            "installation finished. no error reported."
-            or "initcpio image generation successful" in event_log
-        ):
-            error = False
-
-        else:
-            if error is None:
-                # check errors and indicate to user install failed
-                for log in event_log:
-                    # if "installation finished. no error reported." in log:
-                    #     error = False
-                    #     break
-                    if "error" in log or "errors" in log:
-                        event = (
-                            "%s <b>[ERROR]: Errors have been encountered during installation</b>\n"
-                            % (datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
-                        )
-
-                        logger.error(log)
-
-                        self.messages_queue.put(event)
-
-                        self.errors_found = True
-
+                    if "no space left on device" in line.lower().strip():
+                        self.restore_kernel = None
                         error = True
-
-                        GLib.idle_add(
-                            show_mw,
-                            self,
-                            "System changes",
-                            f"Kernel {self.action} failed\n"
-                            f"<b>There have been errors, please review the logs</b>\n",
-                            "images/48x48/akm-warning.png",
-                            priority=GLib.PRIORITY_DEFAULT,
-                        )
-
                         break
+                    if "initcpio" in line.lower().strip():
+                        if "image generation successful" in line.lower().strip():
+                            error = False
+                            break
+                    if (
+                        "installation finished. no error reported"
+                        in line.lower().strip()
+                    ):
+                        error = False
+                        break
+                    if (
+                        "error" in line.lower().strip()
+                        or "errors" in line.lower().strip()
+                    ):
+                        error = True
+                        break
+
+                # time.sleep(0.1)
+
+        if error is True:
+
+            self.errors_found = True
+
+            error = True
+
+            GLib.idle_add(
+                show_mw,
+                self,
+                "System changes",
+                f"Kernel {self.action} failed\n"
+                f"<b>There have been errors, please review the logs</b>",
+                priority=GLib.PRIORITY_DEFAULT,
+            )
 
         # query to check if kernel installed
 
         if check_kernel_installed(self.kernel.name + "-headers") and error is False:
-
-            self.kernel_state_queue.put((0, "install", self.kernel.name + "-headers"))
-
-            event = "%s [INFO]: Installation of %s-headers completed\n" % (
-                datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
-                self.kernel.name,
-            )
-
-            self.messages_queue.put(event)
-
+            self.kernel_state_queue.put((0, "install"))
         else:
-            self.kernel_state_queue.put((1, "install", self.kernel.name + "-headers"))
-
-            event = "%s [ERROR]: Installation of %s-headers failed\n" % (
-                datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
-                self.kernel.name,
-            )
+            self.kernel_state_queue.put((1, "install"))
 
             self.errors_found = True
             self.messages_queue.put(event)
 
         if check_kernel_installed(self.kernel.name) and error is False:
-            self.kernel_state_queue.put((0, "install", self.kernel.name))
-
-            event = "%s [INFO]: Installation of kernel %s completed\n" % (
-                datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
-                self.kernel.name,
-            )
-
-            self.messages_queue.put(event)
-
+            self.kernel_state_queue.put((0, "install"))
         else:
-            self.kernel_state_queue.put((1, "install", self.kernel.name))
-
-            event = "%s [ERROR]: Installation of kernel %s failed\n" % (
-                datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
-                self.kernel.name,
-            )
-
-            self.messages_queue.put(event)
+            self.kernel_state_queue.put((1, "install"))
+            self.errors_found = True
 
         # signal to say end reached
         self.kernel_state_queue.put(None)
@@ -536,15 +535,18 @@ def install_archive_kernel(self):
     except Exception as e:
         logger.error("Exception in install_archive_kernel(): %s" % e)
 
-        GLib.idle_add(
-            show_mw,
-            self,
-            "System changes",
-            f"<b>Kernel {self.action} failed</b>\n"
-            f"There have been errors, please review the logs\n",
-            "images/48x48/akm-warning.png",
-            priority=GLib.PRIORITY_DEFAULT,
-        )
+        # GLib.idle_add(
+        #     show_mw,
+        #     self,
+        #     "System changes",
+        #     f"<b>Kernel {self.action} failed</b>\n"
+        #     f"There have been errors, please review the logs\n",
+        #     "images/48x48/akm-warning.png",
+        #     priority=GLib.PRIORITY_DEFAULT,
+        # )
+    finally:
+        if os.path.exists(self.lockfile):
+            os.unlink(self.lockfile)
 
 
 def refresh_cache(self):
@@ -712,6 +714,7 @@ def parse_archive_html(response, linux_kernel):
                             version is not None
                             and url is not None
                             and headers is not None
+                            and file_format == ".pkg.tar.zst"
                             and datetime.datetime.now().year
                             - datetime.datetime.strptime(
                                 last_modified, "%d-%b-%Y %H:%M"
@@ -911,10 +914,13 @@ def check_kernel_installed(name):
         if process_kernel_query.returncode == 0:
             for line in out.decode("utf-8").splitlines():
                 if line.split(" ")[0] == name:
-                    # logger.debug("Kernel installed")
+
+                    logger.info("Kernel installed")
+
                     return True
+
         else:
-            # logger.debug("Kernel is not installed")
+            logger.info("Kernel is not installed")
             return False
 
         return False
@@ -923,12 +929,13 @@ def check_kernel_installed(name):
 
 
 def wait_for_pacman_process():
-
+    logger.info("Waiting for pacman process")
     timeout = 120
     i = 0
     while check_pacman_lockfile():
         time.sleep(0.1)
-        logger.debug("Pacman lockfile found .. waiting")
+        if logger.getEffectiveLevel() == 10:
+            logger.debug("Pacman lockfile found .. waiting")
         i += 1
         if i == timeout:
             logger.info("Timeout reached")
@@ -949,6 +956,7 @@ def uninstall(self):
 
         uninstall_cmd_str = None
         event_log = []
+        # self.errors_found = False
 
         if kernel_installed is True and kernel_headers_installed is True:
             uninstall_cmd_str = [
@@ -964,9 +972,11 @@ def uninstall(self):
 
         if kernel_installed == 0:
             logger.info("Kernel is not installed, uninstall not required")
-            self.kernel_state_queue.put((0, "uninstall", self.kernel.name))
+            self.kernel_state_queue.put((0, "uninstall"))
+            return
 
-        logger.debug("Uninstall cmd = %s" % uninstall_cmd_str)
+        if logger.getEffectiveLevel() == 10:
+            logger.debug("Uninstall cmd = %s" % uninstall_cmd_str)
 
         # check if kernel, and kernel header is actually installed
         if uninstall_cmd_str is not None:
@@ -985,34 +995,35 @@ def uninstall(self):
                 uninstall_cmd_str,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                bufsize=1,
                 universal_newlines=True,
                 env=locale_env,
+                bufsize=1,
             ) as process:
                 while True:
                     if process.poll() is not None:
                         break
                     for line in process.stdout:
+                        if logger.getEffectiveLevel() == 10:
+                            print(line.strip())
+                        # print(line.strip())
                         self.messages_queue.put(line)
-                        print(line.strip())
-                        event_log.append(line.lower().strip())
+                        # event_log.append(line.lower().strip())
+                        if (
+                            "error" in line.lower().strip()
+                            or "errors" in line.lower().strip()
+                        ):
+                            self.errors_found = True
+                            break
 
                         # self.pacmanlog_queue.put(line)
                         # process_stdout_lst.append(line)
 
-                    time.sleep(0.3)
-
-            self.errors_found = False
-            for log in event_log:
-                if "error" in log:
-                    self.errors_found = True
+                    # time.sleep(0.1)
 
             # query to check if kernel installed
             if "headers" in uninstall_cmd_str:
                 if check_kernel_installed(self.kernel.name + "-headers") is True:
-                    self.kernel_state_queue.put(
-                        (1, "uninstall", self.kernel.name + "-headers")
-                    )
+                    self.kernel_state_queue.put((1, "uninstall"))
 
                     event = (
                         "%s [ERROR]: Uninstall failed\n"
@@ -1022,7 +1033,7 @@ def uninstall(self):
                     self.messages_queue.put(event)
 
                 else:
-                    self.kernel_state_queue.put((0, "uninstall", self.kernel.name))
+                    self.kernel_state_queue.put((0, "uninstall"))
 
                     event = (
                         "%s [INFO]: Uninstall completed\n"
@@ -1033,7 +1044,7 @@ def uninstall(self):
 
             else:
                 if check_kernel_installed(self.kernel.name) is True:
-                    self.kernel_state_queue.put((1, "uninstall", self.kernel.name))
+                    self.kernel_state_queue.put((1, "uninstall"))
 
                     event = (
                         "%s [ERROR]: Uninstall failed\n"
@@ -1043,7 +1054,7 @@ def uninstall(self):
                     self.messages_queue.put(event)
 
                 else:
-                    self.kernel_state_queue.put((0, "uninstall", self.kernel.name))
+                    self.kernel_state_queue.put((0, "uninstall"))
 
                     event = (
                         "%s [INFO]: Uninstall completed\n"
@@ -1098,11 +1109,31 @@ def get_community_kernels(self):
                             version = line.split("Version         :")[1].strip()
                         if line.startswith("Installed Size  :"):
                             install_size = line.split("Installed Size  :")[1].strip()
-                            if "MiB" in install_size:
-                                install_size = round(
-                                    float(install_size.replace("MiB", "").strip())
-                                    * 1.048576,
+                            if logger.getEffectiveLevel() == 10:
+                                logger.debug(
+                                    "%s installed kernel size = %s"
+                                    % (name, install_size)
                                 )
+                            if "MiB" in install_size:
+                                if install_size.find(",") >= 0:
+                                    if logger.getEffectiveLevel() == 10:
+                                        logger.debug("Comma found inside install size")
+                                    install_size = round(
+                                        float(
+                                            install_size.replace(",", ".")
+                                            .strip()
+                                            .replace("MiB", "")
+                                            .strip()
+                                        )
+                                        * 1.048576,
+                                        1,
+                                    )
+                                else:
+                                    install_size = round(
+                                        float(install_size.replace("MiB", "").strip())
+                                        * 1.048576,
+                                        1,
+                                    )
 
                         if line.startswith("Build Date      :"):
                             build_date = line.split("Build Date      :")[1].strip()
@@ -1130,6 +1161,16 @@ def get_community_kernels(self):
 # =====================================================
 def install_community_kernel(self):
     try:
+        if logger.getEffectiveLevel() == 10:
+            logger.debug("Cleaning pacman cache, removing community packages")
+        if os.path.exists(pacman_cache):
+            for root, dirs, files in os.walk(pacman_cache):
+                for name in files:
+                    for comm_kernel in community_kernels_dict.keys():
+                        if name.startswith(comm_kernel):
+                            if os.path.exists(os.path.join(root, name)):
+                                os.remove(os.path.join(root, name))
+
         error = False
         install_cmd_str = [
             "pacman",
@@ -1147,7 +1188,7 @@ def install_community_kernel(self):
             " ".join(install_cmd_str),
         )
 
-        event_log = []
+        error = False
 
         self.messages_queue.put(event)
 
@@ -1155,7 +1196,6 @@ def install_community_kernel(self):
             install_cmd_str,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            bufsize=1,
             universal_newlines=True,
             env=locale_env,
         ) as process:
@@ -1163,22 +1203,49 @@ def install_community_kernel(self):
                 if process.poll() is not None:
                     break
                 for line in process.stdout:
-                    print(line.strip())
+                    if logger.getEffectiveLevel() == 10:
+                        print(line.strip())
+
                     self.messages_queue.put(line)
-                    event_log.append(line.lower().strip())
 
-                time.sleep(0.3)
+                    if "no space left on device" in line.lower().strip():
+                        error = True
+                        break
+                    if "initcpio" in line.lower().strip():
+                        if "image generation successful" in line.lower().strip():
+                            error = False
+                            break
+                    if (
+                        "installation finished. no error reported"
+                        in line.lower().strip()
+                    ):
+                        error = False
+                        break
+                    if (
+                        "error" in line.lower().strip()
+                        or "errors" in line.lower().strip()
+                    ):
+                        error = True
+                        break
+                time.sleep(0.1)
 
-        for log in event_log:
-            if "installation finished. no error reported." in log:
-                error = False
-                break
+        if error is True:
 
-            if "error" in log:
-                error = True
+            self.errors_found = True
+
+            error = True
+
+            GLib.idle_add(
+                show_mw,
+                self,
+                "System changes",
+                f"Kernel {self.action} failed\n"
+                f"<b>There have been errors, please review the logs</b>\n",
+                priority=GLib.PRIORITY_DEFAULT,
+            )
 
         if check_kernel_installed(self.kernel.name) and error is False:
-            self.kernel_state_queue.put((0, "install", self.kernel.name))
+            self.kernel_state_queue.put((0, "install"))
 
             event = "%s [INFO]: Installation of %s completed\n" % (
                 datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
@@ -1188,7 +1255,7 @@ def install_community_kernel(self):
             self.messages_queue.put(event)
 
         else:
-            self.kernel_state_queue.put((1, "install", self.kernel.name))
+            self.kernel_state_queue.put((1, "install"))
 
             event = "%s [ERROR]: Installation of %s failed\n" % (
                 datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
@@ -1202,6 +1269,9 @@ def install_community_kernel(self):
         self.kernel_state_queue.put(None)
     except Exception as e:
         logger.error("Exception in install_community_kernel(): %s " % e)
+    finally:
+        if os.path.exists(self.lockfile):
+            os.unlink(self.lockfile)
 
 
 # =====================================================
@@ -1246,10 +1316,10 @@ def get_pacman_repos():
 
 
 def get_installed_kernel_info(package_name):
+    logger.info("Installed kernel info - %s" % package_name)
     query_str = ["pacman", "-Qi", package_name]
 
     try:
-
         process_kernel_query = subprocess.Popen(
             query_str,
             shell=False,
@@ -1264,13 +1334,35 @@ def get_installed_kernel_info(package_name):
             for line in out.decode("utf-8").splitlines():
                 if line.startswith("Installed Size  :"):
                     install_size = line.split("Installed Size  :")[1].strip()
-                    if "MiB" in install_size:
-                        install_size = round(
-                            float(install_size.replace("MiB", "").strip()) * 1.048576,
+                    if logger.getEffectiveLevel() == 10:
+                        logger.debug(
+                            "%s installed kernel size = %s"
+                            % (package_name, install_size)
                         )
+                    if "MiB" in install_size:
+                        if install_size.find(",") >= 0:
+                            logger.debug("Comma found inside install size")
+                            install_size = round(
+                                float(
+                                    install_size.replace(",", ".")
+                                    .strip()
+                                    .replace("MiB", "")
+                                    .strip()
+                                )
+                                * 1.048576,
+                                1,
+                            )
+                        else:
+                            install_size = round(
+                                float(install_size.replace("MiB", "").strip())
+                                * 1.048576,
+                                1,
+                            )
                 if line.startswith("Install Date    :"):
                     install_date = line.split("Install Date    :")[1].strip()
             return install_size, install_date
+        else:
+            logger.error("Failed to get installed kernel info")
     except Exception as e:
         logger.error("Exception in get_installed_kernel_info(): %s" % e)
 
@@ -1281,6 +1373,7 @@ def get_installed_kernel_info(package_name):
 
 
 def get_installed_kernels():
+    logger.info("Get installed kernels")
     query_str = ["pacman", "-Q"]
     installed_kernels = []
 
@@ -1305,6 +1398,10 @@ def get_installed_kernels():
                             package_name in supported_kernels_dict
                             or package_name in community_kernels_dict
                         ):
+                            if logger.getEffectiveLevel() == 10:
+                                logger.debug(
+                                    "Installed linux package = %s" % package_name
+                                )
                             install_size, install_date = get_installed_kernel_info(
                                 package_name
                             )
@@ -1329,11 +1426,12 @@ def get_installed_kernels():
 
 def get_active_kernel():
     logger.info("Getting active Linux kernel")
-    query_str = ["uname", "-rs"]
+    # cmd = ["uname", "-rs"]
+    cmd = ["kernel-install"]
 
     try:
         process_kernel_query = subprocess.Popen(
-            query_str,
+            cmd,
             shell=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -1345,13 +1443,15 @@ def get_active_kernel():
         if process_kernel_query.returncode == 0:
             for line in out.decode("utf-8").splitlines():
                 if len(line.strip()) > 0:
-                    kernel = line.strip()
-                    _version = "-".join(kernel.split("-")[:-1])
-                    _type = kernel.split("-")[-1]
+                    if "Kernel Version:" in line:
+                        logger.info(
+                            "Active kernel = %s"
+                            % line.split("Kernel Version:")[1].strip()
+                        )
+                        return line.split("Kernel Version:")[1].strip()
+        else:
+            return "unknown"
 
-                    logger.info("Active kernel = %s" % kernel)
-
-                    return kernel
     except Exception as e:
         logger.error("Exception in get_active_kernel(): %s" % e)
 
@@ -1363,23 +1463,26 @@ def sync_package_db():
     try:
         sync_str = ["pacman", "-Sy"]
         logger.info("Synchronizing pacman package databases")
-        process_sync = subprocess.run(
-            sync_str,
+
+        cmd = ["pacman", "-Sy"]
+
+        if logger.getEffectiveLevel() == 10:
+            logger.debug("Running cmd = %s" % cmd)
+
+        process = subprocess.Popen(
+            cmd,
             shell=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            timeout=process_timeout,
             env=locale_env,
         )
 
-        if process_sync.returncode == 0:
+        out, err = process.communicate(timeout=600)
+
+        if process.returncode == 0:
             return None
         else:
-            if process_sync.stdout:
-                out = str(process_sync.stdout.decode("utf-8"))
-                logger.error(out)
-
-                return out
+            return out.decode("utf-8")
 
     except Exception as e:
         logger.error("Exception in sync_package_db(): %s" % e)
@@ -1434,8 +1537,16 @@ def get_boot_loader():
 # ======================================================================
 
 
-def get_kernel_version(kernel):
-    cmd = ["pacman", "-Qli", kernel]
+def get_kernel_modules_version(kernel, db):
+    cmd = None
+    if db == "local":
+        if logger.getEffectiveLevel() == 10:
+            logger.debug("Getting kernel module version from local pacman repo")
+        cmd = ["pacman", "-Qli", kernel]
+    if db == "package":
+        if logger.getEffectiveLevel() == 10:
+            logger.debug("Getting kernel module version from package cache file")
+        cmd = ["pacman", "-Qlip", kernel]
     # pacman_kernel_version = None
     kernel_modules_path = None
     try:
@@ -1447,28 +1558,25 @@ def get_kernel_version(kernel):
             stderr=subprocess.STDOUT,
             timeout=process_timeout,
             universal_newlines=True,
-            bufsize=1,
             env=locale_env,
         )
 
         if process.returncode == 0:
             for line in process.stdout.splitlines():
-                # if line.startswith("Version         :"):
-                #     pacman_kernel_version = line.split("Version         :")[1].strip()
-                #     print(pacman_kernel_version)
-
-                if "/usr/lib/modules/" in line:
+                if "usr/lib/modules/" in line:
                     if "kernel" in line.split(" ")[1]:
                         kernel_modules_path = line.split(" ")[1]
                         break
 
             if kernel_modules_path is not None:
                 return (
-                    kernel_modules_path.split("/usr/lib/modules/")[1]
+                    kernel_modules_path.split("usr/lib/modules/")[1]
                     .strip()
                     .split("/kernel/")[0]
                     .strip()
                 )
+            else:
+                return None
         else:
             return None
 
@@ -1489,7 +1597,6 @@ def run_process(self):
         self.cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        bufsize=1,
         universal_newlines=True,
         env=locale_env,
     ) as process:
@@ -1499,7 +1606,8 @@ def run_process(self):
             for line in process.stdout:
                 self.messages_queue.put(line)
                 self.stdout_lines.append(line.lower().strip())
-                print(line.strip())
+                if logger.getEffectiveLevel() == 10:
+                    print(line.strip())
 
     for log in self.stdout_lines:
         if "error" in log or "errors" in log or "failed" in log:
@@ -1507,17 +1615,132 @@ def run_process(self):
             error = True
 
     if error is True:
-        self.label_notify_revealer.set_text("%s failed" % " ".join(self.cmd))
-        self.reveal_notify()
-
         logger.error("%s failed" % " ".join(self.cmd))
-    else:
-        self.label_notify_revealer.set_text("%s completed" % " ".join(self.cmd))
-        self.reveal_notify()
 
+        return True
+    else:
         logger.info("%s completed" % " ".join(self.cmd))
 
+        return False
+
         # time.sleep(0.3)
+
+
+# ======================================================================
+#                  KERNEL INITRD IMAGES TO AND FROM /BOOT
+# ======================================================================
+
+
+def kernel_initrd(self):
+    logger.info("Adding and removing kernel and initird images")
+    pkg_modules_version = None
+
+    if self.action == "install":
+        if self.source == "official":
+
+            pkg_modules_version = get_kernel_modules_version(
+                "%s/%s"
+                % (
+                    pacman_cache,
+                    "%s-x86_64%s" % (self.kernel.version, self.kernel.file_format),
+                ),
+                "package",
+            )
+
+        if self.source == "community":
+            pkg_modules_version = get_kernel_modules_version(
+                "%s/%s"
+                % (
+                    pacman_cache,
+                    "%s-%s-x86_64.pkg.tar.zst"
+                    % (self.kernel.name, self.kernel.version),
+                ),
+                "package",
+            )
+
+        if pkg_modules_version is None:
+            logger.error("Failed to extract modules version from package")
+            return 1
+
+        logger.debug("Package modules version = %s" % pkg_modules_version)
+
+    # cmd = ["pacman", "-Qlp", "%s/" % pacman_cache]
+
+    if self.action == "install":
+        logger.info("Adding kernel and initrd images to /boot")
+        self.image = "images/48x48/akm-install.png"
+
+        if self.local_modules_version is not None:
+            for self.cmd in [
+                [
+                    "kernel-install",
+                    "remove",
+                    self.local_modules_version,
+                ],
+                [
+                    "kernel-install",
+                    "add",
+                    pkg_modules_version,
+                    "/lib/modules/%s/vmlinuz" % pkg_modules_version,
+                ],
+            ]:
+                err = run_process(self)
+                if err is True:
+                    return 1
+
+        else:
+            self.cmd = [
+                "kernel-install",
+                "add",
+                pkg_modules_version,
+                "/lib/modules/%s/vmlinuz" % pkg_modules_version,
+            ]
+            err = run_process(self)
+            if err is True:
+                return 1
+
+    else:
+        logger.info("Removing kernel and initrd images from /boot")
+        self.image = "images/48x48/akm-remove.png"
+        if self.local_modules_version is not None:
+            self.cmd = [
+                "kernel-install",
+                "remove",
+                self.local_modules_version,
+            ]
+            err = run_process(self)
+            if err is True:
+                return 1
+
+
+# ======================================================================
+#                  CHECK PACMAN REPO
+# ======================================================================
+def check_pacman_repo(repo):
+    logger.info("Checking %s pacman repository is configured" % repo)
+    cmd = ["pacman-conf", "-r", repo]
+
+    try:
+        with subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            universal_newlines=True,
+            env=locale_env,
+        ) as process:
+            while True:
+                if process.poll() is not None:
+                    break
+                # for line in process.stdout:
+                #     if logger.getEffectiveLevel() == 10:
+                #         print(line.strip())
+
+            if process.returncode == 0:
+                return True
+            else:
+                return False
+    except Exception as e:
+        logger.error("Exception in check_pacman_repo(): %s" % e)
 
 
 # ======================================================================
@@ -1531,65 +1754,20 @@ def update_bootloader(self):
     logger.info("Updating bootloader")
     cmds = []
     error = False
-    self.stdout_lines = []
-
-    if self.action == "install":
-        image = "images/48x48/akm-install.png"
-        if self.installed_kernel_version is not None:
-            for self.cmd in [
-                # ["kernel-install", "add-all", "--verbose"],
-                [
-                    "kernel-install",
-                    "add",
-                    self.installed_kernel_version,
-                    "/lib/modules/%s/vmlinuz" % self.installed_kernel_version,
-                ],
-                [
-                    "kernel-install",
-                    "remove",
-                    self.installed_kernel_version,
-                ],
-            ]:
-                run_process(self)
-
-        else:
-            # self.cmd = ["kernel-install", "add-all", "--verbose"].
-            self.installed_kernel_version = get_kernel_version(self.kernel.name)
-            self.cmd = [
-                "kernel-install",
-                "add",
-                self.installed_kernel_version,
-                "/lib/modules/%s/vmlinuz" % self.installed_kernel_version,
-            ]
-            run_process(self)
-
-    else:
-        image = "images/48x48/akm-remove.png"
-        if self.installed_kernel_version is not None:
-            self.cmd = [
-                "kernel-install",
-                "remove",
-                self.installed_kernel_version,
-            ]
-            run_process(self)
+    stdout_lines = []
 
     try:
-
-        """
-        kernel-install -add-all
-        kernel-install remove $kernel_version
-        this is for systems which do not have any pacman hooks in place
-        useful for vanilla arch installs
-        """
-
-        self.label_notify_revealer.set_text("Updating bootloader %s" % self.bootloader)
-        self.reveal_notify()
-
         logger.info("Current bootloader = %s" % self.bootloader)
 
         cmd = None
 
         if self.bootloader == "grub":
+
+            self.label_notify_revealer.set_text(
+                "Updating bootloader %s" % self.bootloader
+            )
+            self.reveal_notify()
+
             if self.bootloader_grub_cfg is not None:
                 cmd = ["grub-mkconfig", "-o", self.bootloader_grub_cfg]
             else:
@@ -1604,12 +1782,48 @@ def update_bootloader(self):
         elif self.bootloader == "systemd-boot":
             # cmd = ["bootctl", "update"]
             # graceful update systemd-boot
-            cmd = ["bootctl", "--no-variables", "--graceful", "update"]
-            event = "%s [INFO]: Running %s\n" % (
-                datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
-                " ".join(cmd),
+            # cmd = ["bootctl", "--no-variables", "--graceful", "update"]
+            # event = "%s [INFO]: Running %s\n" % (
+            #     datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
+            #     " ".join(cmd),
+            # )
+
+            self.label_notify_revealer.set_text(
+                "%s skipping bootloader update" % self.bootloader
             )
+            self.reveal_notify()
+
+            event = (
+                "%s [INFO]: systemd-boot skipping bootloader update\n"
+                % datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+            )
+
+            logger.info("systemd-boot skipping bootloader update")
+
             self.messages_queue.put(event)
+
+            if (
+                self.restore is not None
+                and self.restore is False
+                and self.errors_found is False
+            ):
+                GLib.idle_add(
+                    show_mw,
+                    self,
+                    "System changes",
+                    f"<b>Kernel {self.action} completed</b>\n"
+                    f"This window can now be closed",
+                    priority=GLib.PRIORITY_DEFAULT,
+                )
+            # elif self.errors_found is True:
+            #     GLib.idle_add(
+            #         show_mw,
+            #         self,
+            #         "System changes",
+            #         f"<b>There have been errors, please review the logs</b>\n",
+            #         self.image,
+            #         priority=GLib.PRIORITY_DEFAULT,
+            #     )
         else:
             logger.error("Bootloader is empty / not supported")
 
@@ -1620,7 +1834,6 @@ def update_bootloader(self):
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                bufsize=1,
                 universal_newlines=True,
                 env=locale_env,
             ) as process:
@@ -1630,7 +1843,9 @@ def update_bootloader(self):
                     for line in process.stdout:
                         self.stdout_lines.append(line.strip())
                         self.messages_queue.put(line)
-                        print(line.strip())
+                        if logger.getEffectiveLevel() == 10:
+                            print(line.strip())
+                        # print(line.strip())
 
                     # time.sleep(0.3)
 
@@ -1648,20 +1863,13 @@ def update_bootloader(self):
                     )
                     self.messages_queue.put(event)
 
-                    logger.info("Linux packages have changed a reboot is recommended")
-                    event = "%s [INFO]: <b>#### Linux packages have changed a reboot is recommended ####</b>\n" % datetime.datetime.now().strftime(
-                        "%Y-%m-%d-%H-%M-%S"
-                    )
-                    self.messages_queue.put(event)
-
-                    if self.restore is False:
+                    if self.restore is False and self.errors_found is False:
                         GLib.idle_add(
                             show_mw,
                             self,
                             "System changes",
                             f"<b>Kernel {self.action} completed</b>\n"
-                            f"This window can now be closed\n",
-                            image,
+                            f"This window can now be closed",
                             priority=GLib.PRIORITY_DEFAULT,
                         )
                 else:
@@ -1677,14 +1885,14 @@ def update_bootloader(self):
                         )
                         self.messages_queue.put(event)
 
-                        if self.restore is False:
+                        if self.restore is False and self.errors_found is False:
                             GLib.idle_add(
                                 show_mw,
                                 self,
                                 "System changes",
                                 f"<b>Kernel {self.action} completed</b>\n"
-                                f"This window can now be closed\n",
-                                image,
+                                f"This window can now be closed",
+                                self.image,
                                 priority=GLib.PRIORITY_DEFAULT,
                             )
 
@@ -1708,29 +1916,13 @@ def update_bootloader(self):
                             self,
                             "System changes",
                             f"<b>Kernel {self.action} failed .. attempting kernel restore</b>\n"
-                            f"There have been errors, please review the logs\n",
-                            image,
+                            f"There have been errors, please review the logs",
                             priority=GLib.PRIORITY_DEFAULT,
                         )
 
-        else:
-            logger.error("Bootloader update failed")
-
-            GLib.idle_add(
-                show_mw,
-                self,
-                "System changes",
-                f"<b>Kernel {self.action} failed</b>\n"
-                f"There have been errors, please review the logs\n",
-                image,
-                priority=GLib.PRIORITY_DEFAULT,
-            )
-        if os.path.exists(self.lockfile):
-            os.unlink(self.lockfile)
-        # else:
-        #     logger.error("Bootloader update cannot continue, failed to set command.")
     except Exception as e:
         logger.error("Exception in update_bootloader(): %s" % e)
+    finally:
         if os.path.exists(self.lockfile):
             os.unlink(self.lockfile)
 
@@ -1738,11 +1930,10 @@ def update_bootloader(self):
 # ======================================================================
 #                   SHOW MESSAGE WINDOW AFTER BOOTLOADER UPDATE
 # ======================================================================
-def show_mw(self, title, msg, image):
+def show_mw(self, title, msg):
     mw = MessageWindow(
         title=title,
         message=msg,
-        image_path=image,
         detailed_message=False,
         transient_for=self,
     )

@@ -75,6 +75,11 @@ label#label_active_kernel {
     font-size: 12px;
 }
 
+label#label_flowbox_message{
+    padding: 10px 10px 10px 10px;
+    font-size: medium;
+}
+
 label#label_stack_kernel {
    font-size: 20px;
    font-weight: 600;

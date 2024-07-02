@@ -1,4 +1,5 @@
 import random
+import shutil
 import sys
 import gi
 import os
@@ -27,7 +28,7 @@ class ProgressWindow(Gtk.Window):
         self.set_title(title=title)
         self.set_modal(modal=True)
         self.set_resizable(True)
-        self.set_size_request(700, 300)
+        self.set_size_request(700, 250)
         self.connect("close-request", self.on_close)
 
         self.textview = textview
@@ -88,6 +89,8 @@ class ProgressWindow(Gtk.Window):
 
         image_settings = None
 
+        self.local_modules_version = None
+
         if action == "install":
             image_settings = Gtk.Image.new_from_file(
                 os.path.join(base_dir, "images/48x48/akm-install.png")
@@ -104,16 +107,6 @@ class ProgressWindow(Gtk.Window):
                 "Removing <b>%s version %s </b>"
                 % (self.kernel.name, self.kernel.version)
             )
-
-        # get kernel version from pacman
-        self.installed_kernel_version = fn.get_kernel_version(self.kernel.name)
-
-        if self.installed_kernel_version is not None:
-            fn.logger.debug(
-                "Installed kernel version = %s" % self.installed_kernel_version
-            )
-        else:
-            fn.logger.debug("Nothing to remove .. previous kernel not installed")
 
         image_settings.set_halign(Gtk.Align.START)
         image_settings.set_icon_size(Gtk.IconSize.LARGE)
@@ -237,6 +230,7 @@ class ProgressWindow(Gtk.Window):
         self.present()
 
         self.linux_headers = None
+        self.restore_kernel = None
 
         if (
             self.source == "official"
@@ -244,6 +238,7 @@ class ProgressWindow(Gtk.Window):
             or action == "uninstall"
             and self.source == "official"
         ):
+            fn.logger.info("Official kernel selected")
             if kernel.name == "linux":
                 self.linux_headers = "linux-headers"
             if kernel.name == "linux-rt":
@@ -273,19 +268,17 @@ class ProgressWindow(Gtk.Window):
                     kernel.file_format,
                 ),
             ]
-
-        # in the event an install goes wrong, fallback and reinstall previous kernel
-
-        if self.source == "official":
-            self.restore_kernel = None
+            # in the event an install goes wrong, fallback and reinstall previous kernel
 
             for inst_kernel in fn.get_installed_kernels():
                 if inst_kernel.name == self.kernel.name:
-
                     self.restore_kernel = inst_kernel
                     break
 
             if self.restore_kernel:
+                self.local_modules_version = fn.get_kernel_modules_version(
+                    self.restore_kernel.name, "local"
+                )
                 fn.logger.info("Restore kernel = %s" % self.restore_kernel.name)
                 fn.logger.info(
                     "Restore kernel version = %s" % self.restore_kernel.version
@@ -294,6 +287,9 @@ class ProgressWindow(Gtk.Window):
                 fn.logger.info("No previous %s kernel installed" % self.kernel.name)
         else:
             fn.logger.info("Community kernel, no kernel restore available")
+            self.local_modules_version = fn.get_kernel_modules_version(
+                self.kernel.name, "local"
+            )
 
         if fn.check_pacman_lockfile() is False:
             th_monitor_messages_queue = fn.threading.Thread(
@@ -416,7 +412,6 @@ class ProgressWindow(Gtk.Window):
             mw = MessageWindow(
                 title="Pacman process running",
                 message="Pacman is busy processing a transaction .. please wait",
-                image_path="images/48x48/akm-progress.png",
                 transient_for=self,
                 detailed_message=False,
             )
@@ -430,7 +425,6 @@ class ProgressWindow(Gtk.Window):
             mw = MessageWindow(
                 title="Pacman process running",
                 message="Pacman is busy processing a transaction .. please wait",
-                image_path="images/48x48/akm-progress.png",
                 transient_for=self,
                 detailed_message=False,
             )
@@ -442,15 +436,32 @@ class ProgressWindow(Gtk.Window):
 
     def check_kernel_state(self):
         returncode = None
-        kernel = None
+        action = None
         while True:
             items = self.kernel_state_queue.get()
 
-            try:
-                if items is not None:
-                    returncode, action, kernel = items
+            if items is not None:
+                returncode, action = items
 
-                    if returncode == 0:
+            try:
+                if returncode == 0:
+                    self.errors_found = False
+
+                    fn.logger.info("Kernel %s completed" % action)
+
+                    self.label_status.set_markup(
+                        "<span foreground='orange'><b>Kernel %s completed</b></span>"
+                        % self.action
+                    )
+                    self.label_title.set_markup("<b>Kernel %s completed</b>" % action)
+
+                    if fn.kernel_initrd(self) == 1:
+                        self.errors_found = True
+                        self.kernel_fail(action)
+                    else:
+
+                        fn.update_bootloader(self)
+
                         self.label_notify_revealer.set_text(
                             "Kernel %s completed" % action
                         )
@@ -458,170 +469,163 @@ class ProgressWindow(Gtk.Window):
 
                         fn.logger.info("Kernel %s completed" % action)
 
-                    if returncode == 1:
-                        self.errors_found = True
-
-                        self.label_notify_revealer.set_text("Kernel %s failed" % action)
-                        self.reveal_notify()
-
-                        fn.logger.error("Kernel %s failed" % action)
-
-                        event = "%s <b>[ERROR]: Kernel %s failed</b>\n" % (
-                            fn.datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
-                            action,
-                        )
-                        self.messages_queue.put(event)
+                        self.spinner.set_spinning(False)
+                        self.hbox_spinner.hide()
 
                         self.label_status.set_markup(
-                            "<span foreground='orange'><b>Kernel %s failed - see logs above</b></span>"
-                            % action
+                            "<span foreground='orange'><b>Kernel %s completed</b></span>"
+                            % self.action
+                        )
+                        self.label_title.set_markup(
+                            "<b>Kernel %s completed</b>" % action
                         )
 
-                        # undo action here if action == install
-
-                        if (
-                            action == "install"
-                            and self.restore_kernel is not None
-                            and self.source == "official"
-                        ):
-                            event = (
-                                "%s<b> [INFO]: Attempting to undo previous Linux package changes</b>\n"
-                                % (
-                                    fn.datetime.datetime.now().strftime(
-                                        "%Y-%m-%d-%H-%M-%S"
-                                    ),
-                                )
-                            )
-
-                            self.messages_queue.put(event)
-
-                            self.restore = True
-                            fn.logger.info(
-                                "Installation failed, attempting removal of previous Linux package changes"
-                            )
-                            self.set_title("Kernel installation failed")
-
-                            self.label_spinner_progress.set_markup(
-                                "<b>Please wait restoring kernel %s</b>"
-                                % self.restore_kernel.version
-                            )
-
-                            fn.uninstall(self)
-
-                            fn.logger.info(
-                                "Restoring previously installed kernel %s"
-                                % self.restore_kernel.version
-                            )
-
-                            self.official_kernels = [
-                                "%s/packages/l/%s/%s-%s-x86_64%s"
-                                % (
-                                    fn.archlinux_mirror_archive_url,
-                                    self.restore_kernel.name,
-                                    self.restore_kernel.name,
-                                    self.restore_kernel.version,
-                                    ".pkg.tar.zst",
-                                ),
-                                "%s/packages/l/%s/%s-%s-x86_64%s"
-                                % (
-                                    fn.archlinux_mirror_archive_url,
-                                    self.linux_headers,
-                                    self.linux_headers,
-                                    self.restore_kernel.version,
-                                    ".pkg.tar.zst",
-                                ),
-                            ]
-                            self.errors_found = False
-                            fn.install_archive_kernel(self)
-                            self.set_title("Kernel installation failed")
-                            self.label_status.set_markup(
-                                f"<span foreground='orange'><b>Kernel %s failed - see logs above</b></span>\n"
-                                % action
-                            )
-                        else:
-
-                            self.spinner.set_spinning(False)
-                            self.hbox_spinner.hide()
-
-                            self.set_title("Kernel installation failed")
-                            self.label_title.set_markup("<b>Install failed</b>")
-
-                            #
-                            # self.label_progress_window_desc.set_markup(
-                            #     f"<b>This window can be now closed</b>\n"
-                            #     f"<b>A reboot is recommended when Linux packages have changed</b>"
-                            # )
-
-                    # break
-                else:
-                    if (
-                        returncode == 0
-                        and "-headers" in kernel
-                        or action == "uninstall"
-                        or action == "install"
-                        and self.errors_found is False
-                    ):
-
-                        fn.update_bootloader(self)
-                        self.update_installed_list()
-                        self.update_official_list()
-
-                        if len(self.manager_gui.community_kernels) > 0:
-                            self.update_community_list()
-
-                        if self.restore == False:
-                            self.label_title.set_markup(
-                                "<b>Kernel %s completed</b>" % action
-                            )
-
-                            self.label_status.set_markup(
-                                "<span foreground='orange'><b>Kernel %s completed</b></span>"
-                                % action
-                            )
-
-                            self.spinner.set_spinning(False)
-                            self.hbox_spinner.hide()
-
-                            self.label_progress_window_desc.set_markup(
-                                f"<b>This window can be now closed</b>\n"
-                                f"<b>A reboot is recommended when Linux packages have changed</b>"
-                            )
-                        else:
-                            self.label_title.set_markup(
-                                "<b>Kernel %s failed</b>" % action
-                            )
-
-                            self.label_status.set_markup(
-                                "<span foreground='orange'><b>Kernel %s failed</b></span>"
-                                % action
-                            )
-
-                            self.spinner.set_spinning(False)
-                            self.hbox_spinner.hide()
-
-                            self.label_progress_window_desc.set_markup(
-                                f"<b>This window can be now closed</b>\n"
-                                f"<b>Previous kernel restored due to failure</b>\n"
-                                f"<b>A reboot is recommended when Linux packages have changed</b>"
-                            )
-
-                    # # else:
-                    # self.spinner.set_spinning(False)
-                    # self.hbox_spinner.hide()
-                    #
-                    # self.label_progress_window_desc.set_markup(
-                    #     f"<b>This window can be now closed</b>\n"
-                    #     f"<b>A reboot is recommended when Linux packages have changed</b>"
-                    # )
-
                     break
+
+                elif returncode == 1:
+                    self.errors_found = True
+                    self.kernel_fail(action)
+                else:
+                    self.restore = None
+
+                fn.kernel_initrd(self)
+                fn.update_bootloader(self)
+
+                self.spinner.set_spinning(False)
+                self.hbox_spinner.hide()
+
+                if self.errors_found is True:
+
+                    self.label_status.set_markup(
+                        f"<span foreground='orange'><b>Kernel %s failed - see logs above</b></span>\n"
+                        % action
+                    )
+
+                break
+                #
+                # else:
+                #     break
+
             except Exception as e:
                 fn.logger.error("Exception in check_kernel_state(): %s" % e)
+            finally:
+                self.kernel_state_queue.task_done()
+
                 if os.path.exists(self.lockfile):
                     os.unlink(self.lockfile)
 
-            finally:
-                self.kernel_state_queue.task_done()
+                self.update_installed_list()
+                self.update_official_list()
+
+                if len(self.manager_gui.community_kernels) > 0:
+                    self.update_community_list()
+
+                while self.manager_gui.default_context.pending():
+                    self.manager_gui.default_context.iteration(True)
+                    fn.time.sleep(0.3)
+
+                self.spinner.set_spinning(False)
+                self.hbox_spinner.hide()
+
+                if self.errors_found is True:
+                    event = (
+                        "%s [ERROR]: Problems encountered with the last transaction, see logs"
+                        % (fn.datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),)
+                    )
+                    self.messages_queue.put(event)
+
+                else:
+                    event = "%s [INFO]: A reboot is recommended" % (
+                        fn.datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
+                    )
+                    self.messages_queue.put(event)
+
+                if os.path.exists("/usr/lib/modules/build"):
+                    shutil.rmtree("/usr/lib/modules/build", ignore_errors=True)
+
+                break
+
+    def kernel_fail(self, action):
+        self.errors_found = True
+        self.label_notify_revealer.set_text("Kernel %s failed" % action)
+        self.reveal_notify()
+
+        fn.logger.error("Kernel %s failed" % action)
+        self.label_title.set_markup("<b>Kernel %s failed</b>" % action)
+
+        self.label_status.set_markup(
+            "<span foreground='orange'><b>Kernel %s failed - see logs above</b></span>"
+            % action
+        )
+        # self.action = "uninstall"
+        fn.logger.info(
+            "Installation failed, attempting removal of previous Linux package changes"
+        )
+        event = "%s [INFO]: Reverting package changes made\n" % (
+            fn.datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
+        )
+
+        self.label_spinner_progress.set_markup(
+            "<b>Please wait reverting package changes</b>"
+        )
+
+        self.messages_queue.put(event)
+
+        self.label_title.set_markup("<b>Kernel install failed</b>")
+        self.action = "uninstall"
+        fn.uninstall(self)
+
+        if self.restore_kernel is not None and self.source == "official":
+            self.restore = True
+
+            self.label_spinner_progress.set_markup(
+                "<b>Please wait restoring kernel %s</b>" % self.restore_kernel.version
+            )
+
+            fn.logger.info(
+                "Restoring previously installed kernel %s" % self.restore_kernel.version
+            )
+
+            event = "%s [INFO]: Restoring previously installed kernel %s\n" % (
+                fn.datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
+                self.restore_kernel.version,
+            )
+
+            self.messages_queue.put(event)
+
+            self.official_kernels = [
+                "%s/packages/l/%s/%s-%s-x86_64%s"
+                % (
+                    fn.archlinux_mirror_archive_url,
+                    self.restore_kernel.name,
+                    self.restore_kernel.name,
+                    self.restore_kernel.version,
+                    ".pkg.tar.zst",
+                ),
+                "%s/packages/l/%s/%s-%s-x86_64%s"
+                % (
+                    fn.archlinux_mirror_archive_url,
+                    self.linux_headers,
+                    self.linux_headers,
+                    self.restore_kernel.version,
+                    ".pkg.tar.zst",
+                ),
+            ]
+            self.errors_found = False
+            self.action = "install"
+            fn.install_archive_kernel(self)
+
+            self.label_title.set_markup("<b>Kernel restored due to failure</b>")
+        # elif self.source == "community":
+        #     GLib.idle_add(
+        #         fn.show_mw,
+        #         self,
+        #         "System changes",
+        #         f"Kernel {self.action} failed\n"
+        #         f"<b>There have been errors, please review the logs</b>\n",
+        #         "images/48x48/akm-warning.png",
+        #         priority=GLib.PRIORITY_DEFAULT,
+        #     )
 
     def update_installed_list(self):
         self.manager_gui.installed_kernels = fn.get_installed_kernels()

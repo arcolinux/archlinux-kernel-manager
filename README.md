@@ -25,7 +25,7 @@ These kernels are considerably out of date and have shown to fail to install pro
 ## What happens if a kernel installation fails
 
 The application will show a message that it has encountered an issue, and the log inside the progress window, should have the information required to understand why.
-In the event of a failure, the application will try to reinstall the kernel using the version previously installed.
+In the event of a failure, the application will attempt to reinstall the kernel using the version previously installed.
 
 # Community based kernels
 
@@ -63,10 +63,6 @@ By default, the application will use `bootctl` to distinguish which bootloader (
 ## Grub
 
 `grub-mkconfig` is run to update the grub.cfg file.
-
-## systemd-boot
-
-`bootctl --no-variables ---graceful update` is run to update systemd-boot entries
 
 # Advanced settings
 
@@ -118,12 +114,16 @@ community = [
     { name = "linux-nitrous", description = "Modified Linux kernel optimized for Skylake and newer, compiled using clang", headers = "linux-nitrous-headers", repository = "chaotic-aur" },
 ]
 
+[logging]
+# Logging is either info or debug
+loglevel = "info"
+
 # custom bootloader example
 #[bootloader]
 #name = "grub"
 #grub_config = "/boot/grub/grub.cfg"
-
 ```
+
 ## Adding new community based kernels
 
 Further Kernels can be added using the same format.
@@ -139,6 +139,11 @@ This cached file is updated automatically every 5 days to ensure the application
 Using the Update switch inside Advanced Settings, will force the application to update the cache.
 
 This cache file may take a little while to generate since archived Arch kernel package data is being retrieved from the ALA.
+
+Once the cache file is in place, the application also queries the RESTful API using https://archlinux.org/packages/search/json to search for package updates.
+It extracts the `last_update` and compares it against the cache timestamp.
+
+That way the application will include the latest kernel versions.
 
 # Logs
 
