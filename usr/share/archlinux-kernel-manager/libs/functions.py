@@ -450,7 +450,8 @@ def install_archive_kernel(self):
 
         wait_for_pacman_process()
 
-        logger.info("Running %s" % install_cmd_str)
+        if logger.getEffectiveLevel() == 10:
+            logger.debug("Running %s" % install_cmd_str)
 
         event = "%s [INFO]: Running %s\n" % (
             datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
@@ -550,8 +551,11 @@ def install_archive_kernel(self):
 
 
 def refresh_cache(self):
+
+    cached_kernels_list.clear()
     if os.path.exists(cache_file):
         os.remove(cache_file)
+
     get_official_kernels(self)
     write_cache()
 
@@ -559,6 +563,7 @@ def refresh_cache(self):
 def read_cache(self):
     try:
         self.timestamp = None
+
         with open(cache_file, "rb") as f:
             data = tomlkit.load(f)
 
@@ -762,7 +767,11 @@ def get_response(session, linux_kernel, response_queue, response_content):
     )
 
     if response.status_code == 200:
-        logger.debug("Response is 200")
+        if logger.getEffectiveLevel() == 10:
+            logger.debug(
+                "Response code for %s/packages/l/%s = 200 (OK)"
+                % (archlinux_mirror_archive_url, linux_kernel)
+            )
         if response.text is not None:
             response_content[linux_kernel] = response.text
             response_queue.put(response_content)
@@ -805,6 +814,8 @@ def get_official_kernels(self):
                 write_cache()
                 read_cache(self)
 
+                # self.queue_kernels = Queue()
+
                 self.queue_kernels.put(cached_kernels_list)
 
             else:
@@ -846,7 +857,10 @@ def is_thread_alive(thread_name):
 # print all threads
 def print_all_threads():
     for thread in threading.enumerate():
-        logger.info("Thread = %s and state is %s" % (thread.name, thread.is_alive()))
+        if logger.getEffectiveLevel() == 10:
+            logger.debug(
+                "Thread = %s and state is %s" % (thread.name, thread.is_alive())
+            )
 
 
 # =====================================================
@@ -900,7 +914,9 @@ def check_kernel_installed(name):
     try:
         logger.info("Checking kernel package %s is installed" % name)
         check_cmd_str = ["pacman", "-Q", name]
-        logger.debug("Running cmd = %s" % check_cmd_str)
+        if logger.getEffectiveLevel() == 10:
+            logger.debug("Running cmd = %s" % check_cmd_str)
+
         process_kernel_query = subprocess.Popen(
             check_cmd_str,
             shell=False,
@@ -982,8 +998,6 @@ def uninstall(self):
         if uninstall_cmd_str is not None:
 
             wait_for_pacman_process()
-
-            logger.info("Running %s" % uninstall_cmd_str)
 
             event = "%s [INFO]: Running %s\n" % (
                 datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
@@ -1180,8 +1194,8 @@ def install_community_kernel(self):
             "--noconfirm",
             "--needed",
         ]
-
-        logger.info("Running %s" % install_cmd_str)
+        if logger.getEffectiveLevel() == 10:
+            logger.debug("Running %s" % install_cmd_str)
 
         event = "%s [INFO]: Running %s\n" % (
             datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
@@ -1479,6 +1493,9 @@ def sync_package_db():
 
         out, err = process.communicate(timeout=600)
 
+        if logger.getEffectiveLevel() == 10:
+            print(out.decode("utf-8"))
+
         if process.returncode == 0:
             return None
         else:
@@ -1492,7 +1509,9 @@ def get_boot_loader():
     try:
         logger.info("Getting bootloader")
         cmd = ["bootctl", "status"]
-        logger.debug("Running %s" % " ".join(cmd))
+        if logger.getEffectiveLevel() == 10:
+            logger.debug("Running %s" % " ".join(cmd))
+
         process = subprocess.run(
             cmd,
             shell=False,
@@ -1550,7 +1569,9 @@ def get_kernel_modules_version(kernel, db):
     # pacman_kernel_version = None
     kernel_modules_path = None
     try:
-        logger.debug("Running %s" % " ".join(cmd))
+        if logger.getEffectiveLevel() == 10:
+            logger.debug("Running %s" % " ".join(cmd))
+
         process = subprocess.run(
             cmd,
             shell=False,
@@ -1581,13 +1602,15 @@ def get_kernel_modules_version(kernel, db):
             return None
 
     except Exception as e:
-        logger.error("Exception in get_kernel_version(): %s" % e)
+        logger.error("Exception in get_kernel_modules_version(): %s" % e)
 
 
 def run_process(self):
     error = False
     self.stdout_lines = []
-    logger.debug("Running process = %s" % " ".join(self.cmd))
+    if logger.getEffectiveLevel() == 10:
+        logger.debug("Running process = %s" % " ".join(self.cmd))
+
     event = "%s [INFO]: Running %s\n" % (
         datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
         " ".join(self.cmd),
@@ -1829,7 +1852,9 @@ def update_bootloader(self):
 
         if cmd is not None:
             self.stdout_lines = []
-            logger.info("Running %s" % " ".join(cmd))
+            if logger.getEffectiveLevel() == 10:
+                logger.debug("Running %s" % " ".join(cmd))
+
             with subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,

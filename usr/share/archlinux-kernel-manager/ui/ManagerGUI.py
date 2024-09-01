@@ -316,15 +316,29 @@ class ManagerGUI(Gtk.ApplicationWindow):
     # keep splash screen open, until main gui is loaded
     def wait_for_gui_load(self):
         while True:
+            if fn.logger.getEffectiveLevel() == 10:
+                fn.logger.debug("Waiting for GUI to load ..")
+
             # fn.time.sleep(0.2)
             status = self.queue_load_progress.get()
+            try:
 
-            if status == 1:
-                GLib.idle_add(
-                    self.splash_screen.destroy,
-                    priority=GLib.PRIORITY_DEFAULT,
-                )
-                break
+                if fn.logger.getEffectiveLevel() == 10:
+                    fn.logger.debug("Status = %s" % status)
+
+                if status == 1:
+                    if fn.logger.getEffectiveLevel() == 10:
+                        fn.logger.debug("Destroying splashscreen")
+
+                    GLib.idle_add(
+                        self.splash_screen.destroy,
+                        priority=GLib.PRIORITY_DEFAULT,
+                    )
+                    break
+            except Exception as e:
+                fn.logger.error("Exception in wait_for_gui_load(): %s" % e)
+            finally:
+                self.queue_load_progress.task_done()
 
     def on_settings(self, action, param, fn):
         self.open_settings(fn)
@@ -342,7 +356,8 @@ class ManagerGUI(Gtk.ApplicationWindow):
             ).start()
 
     def refresh_ui(self):
-        fn.logger.debug("Refreshing UI")
+        if fn.logger.getEffectiveLevel() == 10:
+            fn.logger.debug("Refreshing UI")
 
         self.label_notify_revealer.set_text("Refreshing UI started")
         GLib.idle_add(
@@ -366,8 +381,8 @@ class ManagerGUI(Gtk.ApplicationWindow):
         if self.pacman_db_sync() is False:
             fn.logger.error("Pacman DB synchronization failed")
         else:
-
-            fn.logger.debug("Adding community kernels to UI")
+            if fn.logger.getEffectiveLevel() == 10:
+                fn.logger.debug("Adding community kernels to UI")
 
             try:
                 thread_get_community_kernels = fn.Thread(
@@ -424,12 +439,14 @@ class ManagerGUI(Gtk.ApplicationWindow):
         )
 
         while self.default_context.pending():
+            if fn.logger.getEffectiveLevel() == 10:
+                fn.logger.debug("Waiting for UI loop")
             fn.time.sleep(0.3)
             self.default_context.iteration(False)
 
         # fn.time.sleep(0.5)
-
-        fn.logger.debug("Refresh UI completed")
+        if fn.logger.getEffectiveLevel() == 10:
+            fn.logger.debug("Refresh UI completed")
 
         self.label_notify_revealer.set_text("Refreshing UI completed")
         GLib.idle_add(
@@ -446,6 +463,7 @@ class ManagerGUI(Gtk.ApplicationWindow):
         fn.logger.info("Application quit")
 
     def load_kernels_gui(self):
+        self.queue_load_progress.put(0)
         hbox_sep = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         hsep = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
         hbox_sep.append(hsep)
@@ -453,6 +471,7 @@ class ManagerGUI(Gtk.ApplicationWindow):
         # handle error here with message
         if self.official_kernels is None:
             fn.logger.error("Failed to retrieve kernel list")
+            self.queue_load_progress.put(1)
 
         stack_sidebar = Gtk.StackSidebar()
         stack_sidebar.set_name("stack_sidebar")
@@ -497,8 +516,10 @@ class ManagerGUI(Gtk.ApplicationWindow):
         fn.logger.info("Creating kernel UI")
 
         # add official kernel flowbox
+        if fn.logger.getEffectiveLevel() == 10:
+            fn.logger.debug("Adding official kernels to UI")
 
-        fn.logger.debug("Adding official kernels to UI")
+        self.queue_load_progress.put(0)
 
         self.kernel_stack.add_official_kernels_to_stack(reload=False)
 
@@ -509,9 +530,10 @@ class ManagerGUI(Gtk.ApplicationWindow):
 
         if self.pacman_db_sync() is False:
             fn.logger.error("Pacman DB synchronization failed")
-        else:
 
-            fn.logger.debug("Adding community kernels to UI")
+        else:
+            if fn.logger.getEffectiveLevel() == 10:
+                fn.logger.debug("Adding community kernels to UI")
 
             try:
                 thread_get_community_kernels = fn.Thread(
@@ -531,13 +553,21 @@ class ManagerGUI(Gtk.ApplicationWindow):
 
                 self.kernel_stack.add_community_kernels_to_stack(reload=False)
 
-                while self.default_context.pending():
+        if fn.logger.getEffectiveLevel() == 10:
+            fn.logger.debug("Sending signal to destroy splashscreen")
 
-                    self.default_context.iteration(True)
-
-                    fn.time.sleep(0.3)
-
+        # signal to destroy splash screen
         self.queue_load_progress.put(1)
 
-        fn.logger.debug("Adding installed kernels to UI")
+        if fn.logger.getEffectiveLevel() == 10:
+            fn.logger.debug("Adding installed kernels to UI")
+
         self.kernel_stack.add_installed_kernels_to_stack(reload=False)
+
+        fn.logger.info("Application started")
+
+        # while self.default_context.pending():
+        #     if fn.logger.getEffectiveLevel() == 10:
+        #         fn.logger.debug("Waiting for UI loop")
+        #     self.default_context.iteration(False)
+        #     fn.time.sleep(0.3)

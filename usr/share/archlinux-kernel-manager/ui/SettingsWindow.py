@@ -600,12 +600,13 @@ class SettingsWindow(Gtk.Window):
         while True:
             if len(fn.fetched_kernels_dict) > 0:
                 self.manager_gui.official_kernels = self.queue_kernels.get()
+
                 self.queue_kernels.task_done()
                 self.refreshed = True
                 if self.manager_gui.official_kernels is not None:
                     switch.set_sensitive(False)
+
                     self.update_official_list()
-                    self.update_community_list()
                     self.update_timestamp()
                     self.label_cache_update_status.set_markup(
                         "<b>Cache refresh completed</b>"
@@ -664,14 +665,6 @@ class SettingsWindow(Gtk.Window):
         self.manager_gui.installed_kernels = fn.get_installed_kernels()
         GLib.idle_add(
             self.manager_gui.kernel_stack.add_official_kernels_to_stack,
-            True,
-        )
-
-    def update_community_list(self):
-        self.manager_gui.installed_kernels = fn.get_installed_kernels()
-
-        GLib.idle_add(
-            self.manager_gui.kernel_stack.add_community_kernels_to_stack,
             True,
         )
 
