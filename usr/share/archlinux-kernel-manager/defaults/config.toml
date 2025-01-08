@@ -15,14 +15,17 @@ official = [
 # Kernels which are sourced from unofficial repositories, these won't work if you haven't updated your pacman configuration
 # https://wiki.archlinux.org/title/Unofficial_user_repositories
 community = [
-    { name = "linux-xanmod", description = "The Linux kernel and modules with Xanmod patches", headers = "linux-xanmod-headers", repository = "chaotic-aur" },
-    { name = "linux-xanmod-lts", description = "The Linux kernel and modules with Xanmod patches", headers = "linux-xanmod-lts-headers", repository = "chaotic-aur" },
-    { name = "linux-amd", description = "Linux kernel aimed at the ZNVER4/MZEN4 AMD Ryzen CPU based hardware", headers = "linux-amd-headers", repository = "chaotic-aur" },
     { name = "linux-cachyos", description = "The Linux EEVDF-BORE scheduler Kernel by CachyOS with other patches and improvements kernel and modules", headers = "linux-cachyos-headers", repository = "chaotic-aur" },
+    { name = "linux-cachyos-lts", description = "The Linux EEVDF-BORE scheduler Kernel by CachyOS with other patches and improvements kernel and modules", headers = "linux-cachyos-lts-headers", repository = "chaotic-aur" },
     { name = "linux-ck", description = "The Linux kernel and modules with ck's hrtimer patches", headers = "linux-ck-headers", repository = "repo-ck" },
     { name = "linux-clear", description = "The Clear Linux kernel and modules", headers = "linux-clear-headers", repository = "chaotic-aur" },
     { name = "linux-lqx", description = "The Linux Liquorix kernel and modules", headers = "linux-lqx-headers", repository = "chaotic-aur" },
+    { name = "linux-mainline", description = "The Linux Mainline kernel and modules", headers = "linux-mainline-headers", repository = "chaotic-aur" },
     { name = "linux-nitrous", description = "Modified Linux kernel optimized for Skylake and newer, compiled using clang", headers = "linux-nitrous-headers", repository = "chaotic-aur" },
+    { name = "linux-xanmod-edge-x64v3", description = "Headers and scripts for building modules for the Linux Xanmod - Rolling Release [EDGE] kernel", headers = "linux-xanmod-edge-x64v3-headers", repository = "chaotic-aur" },
+    { name = "linux-xanmod-lts", description = "Headers and scripts for building modules for the Linux Xanmod - Long Term Support [LTS] kernel", headers = "linux-xanmod-lts-headers", repository = "chaotic-aur" },
+    { name = "linux-xanmod-rt", description = "The Linux kernel and modules with Xanmod patches", headers = "linux-xanmod-rt-headers", repository = "chaotic-aur" },
+    { name = "linux-xanmod-x64v2", description = "Headers and scripts for building modules for the Linux Xanmod - Stable Mainline [MAIN] kernel", headers = "linux-xanmod-x64v2-headers", repository = "chaotic-aur" },
 ]
 
 [logging]
