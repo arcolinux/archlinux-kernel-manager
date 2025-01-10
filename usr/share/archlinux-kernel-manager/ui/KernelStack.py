@@ -471,7 +471,7 @@ class KernelStack:
         ):
             label_warning.set_markup(
                 f"<b>Cannot find any supported unofficial pacman repository's</b>\n"
-                f"<b>Add the Chaotic-AUR pacman repository to access Community based kernels</b>"
+                f"<b>Add the Chaotic-AUR pacman repository to access Community based kernels</b>\n"
                 f"<b>You can do this via ATT or via a script 'toggle-akm-chaotic-repo</b>"
             )
         else:
