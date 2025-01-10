@@ -585,7 +585,6 @@ def refresh_cache(self):
     cached_kernels_list.clear()
     if os.path.exists(cache_file):
         os.remove(cache_file)
-    config_file_backup()
 
     get_official_kernels(self)
     write_cache()
