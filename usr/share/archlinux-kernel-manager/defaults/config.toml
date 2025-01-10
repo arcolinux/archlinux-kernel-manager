@@ -24,7 +24,7 @@ community = [
     { name = "linux-nitrous", description = "Modified Linux kernel optimized for Skylake and newer, compiled using clang", headers = "linux-nitrous-headers", repository = "chaotic-aur" },
     { name = "linux-vfio", description = "The Linux kernel and modules (ACS override and i915 VGA arbiter patches)", headers = "linux-vfio-headers", repository = "chaotic-aur" },
     { name = "linux-vfio-lts", description = "The Linux kernel and modules (ACS override and i915 VGA arbiter patches)", headers = "linux-vfio-lts-headers", repository = "chaotic-aur" },
-    { name = "linux-vfiox64v3", description = "The Linux kernel and modules (ACS override and i915 VGA arbiter patches)", headers = "linux-vfio-x64v3-headers", repository = "chaotic-aur" },
+    { name = "linux-vfio-x64v3", description = "The Linux kernel and modules (ACS override and i915 VGA arbiter patches)", headers = "linux-vfio-x64v3-headers", repository = "chaotic-aur" },
     { name = "linux-xanmod-edge-x64v3", description = "Headers and scripts for building modules for the Linux Xanmod - Rolling Release [EDGE] kernel", headers = "linux-xanmod-edge-x64v3-headers", repository = "chaotic-aur" },
     { name = "linux-xanmod-lts", description = "Headers and scripts for building modules for the Linux Xanmod - Long Term Support [LTS] kernel", headers = "linux-xanmod-lts-headers", repository = "chaotic-aur" },
     { name = "linux-xanmod-rt", description = "The Linux kernel and modules with Xanmod patches", headers = "linux-xanmod-rt-headers", repository = "chaotic-aur" },
