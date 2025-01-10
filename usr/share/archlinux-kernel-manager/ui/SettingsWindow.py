@@ -361,9 +361,9 @@ class SettingsWindow(Gtk.Window):
 
         row_settings_adv.set_child(hbox_bootloader_row)
 
-        vbox_settings_adv.append(label_bootloader)
-        vbox_settings_adv.append(hbox_warning)
-        vbox_settings_adv.append(self.listbox_settings_adv)
+        #vbox_settings_adv.append(label_bootloader)
+        #vbox_settings_adv.append(hbox_warning)
+        #vbox_settings_adv.append(self.listbox_settings_adv)
 
         listbox_settings_cache = Gtk.ListBox()
         listbox_settings_cache.set_selection_mode(Gtk.SelectionMode.NONE)
