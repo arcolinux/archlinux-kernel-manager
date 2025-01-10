@@ -348,6 +348,8 @@ class ManagerGUI(Gtk.ApplicationWindow):
         about_dialog.present()
 
     def on_refresh(self, action, param):
+        fn.backup_config(self)
+        fn.overwrite_setup_config(self)
         if not fn.is_thread_alive(fn.thread_refresh_ui):
             fn.Thread(
                 name=fn.thread_refresh_ui,

@@ -84,6 +84,7 @@ event_log_file = "%s/event.log" % log_dir
 config_file_default = "%s/defaults/config.toml" % base_dir
 config_dir = "%s/.config/archlinux-kernel-manager" % home
 config_file = "%s/.config/archlinux-kernel-manager/config.toml" % home
+config_file_backup = "%s/.config/archlinux-kernel-manager/config.toml_backup" % home
 
 
 logger = logging.getLogger("logger")
@@ -309,6 +310,35 @@ def setup_config(self):
     except Exception as e:
         logger.error("Exception in setup_config(): %s" % e)
 
+def overwrite_setup_config(self):
+    try:
+        if not os.path.exists(config_dir):
+            makedirs(config_dir)
+            permissions(config_dir)
+
+        if os.path.exists(config_file):
+            shutil.copy(config_file_default, config_dir)
+            permissions(config_dir)
+
+        return read_config(self)
+
+    except Exception as e:
+        logger.error("Exception in setup_config(): %s" % e)
+
+def backup_config(self):
+    try:
+        if not os.path.exists(config_dir):
+            makedirs(config_dir)
+            permissions(config_dir)
+
+        if not os.path.exists(config_file_backup):
+            shutil.copy(config_file, config_file_backup)
+            permissions(config_dir)
+
+        return read_config(self)
+
+    except Exception as e:
+        logger.error("Exception in setup_config(): %s" % e)
 
 def update_config(config_data, bootloader):
     try:
@@ -555,6 +585,7 @@ def refresh_cache(self):
     cached_kernels_list.clear()
     if os.path.exists(cache_file):
         os.remove(cache_file)
+    config_file_backup()
 
     get_official_kernels(self)
     write_cache()

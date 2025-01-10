@@ -673,7 +673,7 @@ class SettingsWindow(Gtk.Window):
 
     def on_button_logfile_clicked(self, widget):
         try:
-            cmd = ["sudo", "-u", fn.sudo_username, "xdg-open", fn.event_log_file]
+            cmd = ["sudo", "-u", fn.sudo_username, "nano", fn.event_log_file]
             fn.subprocess.Popen(
                 cmd,
                 shell=False,
