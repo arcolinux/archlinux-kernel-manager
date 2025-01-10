@@ -34,6 +34,12 @@
 echo "Checking for newer files online first"
 git pull
 
+
+workdir=$(pwd)
+echo "Get the toggle-chaotic-repo"
+wget https://raw.githubusercontent.com/arcolinux/arcolinux-system-config/refs/heads/master/usr/local/bin/toggle-chaotic-repo -O $workdir/usr/local/bin/toggle-akm-chaotic-repo
+chmod +x $workdir/usr/local/bin/toggle-akm-chaotic-repo
+
 # Below command will backup everything inside the project folder
 git add --all .
 
