@@ -228,7 +228,7 @@ class ManagerGUI(Gtk.ApplicationWindow):
                     mw.present()
 
         else:
-            fn.logger.error("Failed to set bootloader, application closing")
+            fn.logger.error("Failed to set bootloader, application closing - Refind is not supported")
             fn.sys.exit(1)
 
     def key_pressed(self, keyval, keycode, state, userdata):

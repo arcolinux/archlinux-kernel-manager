@@ -13,7 +13,7 @@ from gi.repository import Gtk, Gio, GLib, Gdk
 base_dir = fn.os.path.dirname(fn.os.path.realpath(__file__))
 
 
-app_name = "Arch Linux Kernel Manager"
+app_name = "Arch Linux Kernel Manager for grub and systemd-boot"
 app_version = "${app_version}"
 app_name_dir = "archlinux-kernel-manager"
 app_id = "com.arcolinux.kernelmanager"
